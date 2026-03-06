@@ -2,31 +2,27 @@
 //  Crypto_minerApp.swift
 //  Crypto miner
 //
-//  Created by Tyler Charles on 2/28/26.
-//
 
 import SwiftUI
-import SwiftData
 
 @main
 struct Crypto_minerApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
-        do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
-        } catch {
-            fatalError("Could not create ModelContainer: \(error)")
-        }
-    }()
-
+    @StateObject private var wallet = WalletService()
+    @StateObject private var dexTradeService = DEXTradeService()
+    @StateObject private var solanaWallet = SolanaWalletService()
+    @StateObject private var jupiterSwap = JupiterSwapService()
+    @StateObject private var renderPump = RenderPumpService()
+    @StateObject private var solanaBalance = SolanaBalanceService()
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(wallet)
+                .environmentObject(dexTradeService)
+                .environmentObject(solanaWallet)
+                .environmentObject(jupiterSwap)
+                .environmentObject(renderPump)
+                .environmentObject(solanaBalance)
         }
-        .modelContainer(sharedModelContainer)
     }
 }

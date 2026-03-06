@@ -1,0 +1,27 @@
+{
+  "name": "pump-tracker-server",
+  "version": "1.0.0",
+  "description": "24/7 pump detection and auto-trade server for Crypto miner app",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "worker": "node worker.js",
+    "pumpapi-ingest": "node pumpapi-ingest-worker.js",
+    "workers": "node scripts/run-workers.js",
+    "benchmark": "node scripts/benchmark-capacity.js",
+    "catalog": "node scripts/build-catalog.js"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.0",
+    "@jup-ag/api": "^6.0.0",
+    "@solana/web3.js": "^1.95.0",
+    "bs58": "^5.0.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "node-fetch": "^3.3.2",
+    "undici": "^7.22.0",
+    "ws": "^8.18.0"
+  }
+}

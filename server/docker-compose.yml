@@ -1,0 +1,31 @@
+# Hub: main server with trading. Workers: contribute-only, no wallet.
+# Deploy hub on one server, workers on others (different IPs = more Gecko quota).
+# Redis: mesh shared store. Set REDIS_URL= in .env to disable.
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  hub:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on: [redis]
+    restart: unless-stopped
+    # Hub runs full stack: Gecko, DexScreener, Birdeye, RPC indexer, /contribute
+
+  # Uncomment to run a worker alongside hub (same machine - same IP, limited benefit)
+  # worker:
+  #   build: .
+  #   command: node worker.js
+  #   env_file: .env
+  #   environment:
+  #     HUB_URL: http://hub:3000
+  #   depends_on: [hub]
+  #   restart: unless-stopped

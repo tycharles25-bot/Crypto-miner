@@ -1,0 +1,12 @@
+# Single worker for cloud VMs. One VM = one worker = one IP.
+# Run on each worker VM: HUB_URL=https://your-hub.com docker compose -f docker-compose.cloud-worker.yml up -d
+
+services:
+  worker:
+    build: .
+    environment:
+      - HUB_URL=${HUB_URL}
+      - WORKER_INTERVAL_MS=${WORKER_INTERVAL_MS:-120000}
+      - WORKER_MAX_POOLS=${WORKER_MAX_POOLS:-25}
+    command: node worker.js
+    restart: unless-stopped

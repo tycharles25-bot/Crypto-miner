@@ -1,0 +1,6 @@
+[
+  { "HTTP_PROXY": "http://proxy1.example.com:8080" },
+  { "HTTP_PROXY": "http://proxy2.example.com:8080" },
+  { "HTTP_PROXY": "http://proxy3.example.com:8080" },
+  {}
+]

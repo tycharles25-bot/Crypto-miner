@@ -1,0 +1,14 @@
+{
+  "name": "render-pump-server",
+  "version": "1.0.0",
+  "description": "PumpApi pump detection server for iOS app",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0"
+  }
+}

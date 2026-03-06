@@ -1,0 +1,6 @@
+# API keys - never commit
+Crypto miner/Config.swift
+
+# Server env (contains private keys)
+server/.env
+server/workers.json

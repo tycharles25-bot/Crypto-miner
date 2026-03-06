@@ -1,0 +1,80 @@
+# PumpApi Ingest Workers - 5 regions = 5 unique IPs = ~95,000 samples/min
+# Render shares IPs per region, so 1 worker per region = 1 PumpApi connection each
+# Deploy: Connect repo to Render → New Blueprint → Select render-pumpapi-ingest.yaml
+# Set HUB_URL when prompted (your hub must be reachable from the internet)
+
+services:
+  - type: worker
+    name: pumpapi-ingest-oregon
+    runtime: node
+    region: oregon
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node pumpapi-ingest-worker.js
+    envVars:
+      - key: HUB_URL
+        sync: false
+      - key: PUMPAPI_BATCH_SIZE
+        value: "1000"
+      - key: PUMPAPI_BATCH_INTERVAL_MS
+        value: "5000"
+
+  - type: worker
+    name: pumpapi-ingest-frankfurt
+    runtime: node
+    region: frankfurt
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node pumpapi-ingest-worker.js
+    envVars:
+      - key: HUB_URL
+        sync: false
+      - key: PUMPAPI_BATCH_SIZE
+        value: "1000"
+      - key: PUMPAPI_BATCH_INTERVAL_MS
+        value: "5000"
+
+  - type: worker
+    name: pumpapi-ingest-singapore
+    runtime: node
+    region: singapore
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node pumpapi-ingest-worker.js
+    envVars:
+      - key: HUB_URL
+        sync: false
+      - key: PUMPAPI_BATCH_SIZE
+        value: "1000"
+      - key: PUMPAPI_BATCH_INTERVAL_MS
+        value: "5000"
+
+  - type: worker
+    name: pumpapi-ingest-ohio
+    runtime: node
+    region: ohio
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node pumpapi-ingest-worker.js
+    envVars:
+      - key: HUB_URL
+        sync: false
+      - key: PUMPAPI_BATCH_SIZE
+        value: "1000"
+      - key: PUMPAPI_BATCH_INTERVAL_MS
+        value: "5000"
+
+  - type: worker
+    name: pumpapi-ingest-virginia
+    runtime: node
+    region: virginia
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node pumpapi-ingest-worker.js
+    envVars:
+      - key: HUB_URL
+        sync: false
+      - key: PUMPAPI_BATCH_SIZE
+        value: "1000"
+      - key: PUMPAPI_BATCH_INTERVAL_MS
+        value: "5000"

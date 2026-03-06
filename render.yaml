@@ -1,0 +1,33 @@
+# Render Blueprint - Pump Tracker Worker
+# Deploy: Connect repo → Render reads this → Create worker
+# Set HUB_URL in Render Dashboard (your hub must be reachable from the internet)
+
+services:
+  - type: worker
+    name: pump-worker-1
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node worker.js
+    envVars:
+      - key: HUB_URL
+        sync: false
+      - key: WORKER_INTERVAL_MS
+        value: "120000"
+      - key: WORKER_MAX_POOLS
+        value: "25"
+
+  # Optional: add more workers for more IPs (each = separate Gecko quota)
+  # - type: worker
+  #   name: pump-worker-2
+  #   runtime: node
+  #   rootDir: server
+  #   buildCommand: npm install
+  #   startCommand: node worker.js
+  #   envVars:
+  #     - key: HUB_URL
+  #       sync: false
+  #     - key: WORKER_INTERVAL_MS
+  #       value: "120000"
+  #     - key: WORKER_MAX_POOLS
+  #       value: "25"

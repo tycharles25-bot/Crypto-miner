@@ -2,15 +2,12 @@
 //  Crypto_minerTests.swift
 //  Crypto minerTests
 //
-//  Created by Tyler Charles on 2/28/26.
-//
 
-import Testing
+import XCTest
+@testable import Crypto_miner
 
-struct Crypto_minerTests {
-
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+final class Crypto_minerTests: XCTestCase {
+    func testExample() throws {
+        XCTAssertTrue(true)
     }
-
 }

@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8353B45E2F560B0A00F0BB57 /* StripePaymentSheet in Frameworks */ = {isa = PBXBuildFile; productRef = 8344AF012F52C34A003D6890 /* StripePaymentSheet */; };
+		8353B45F2F560B0A00F0BB58 /* SolanaSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 8344AF112F52C34A003D6891 /* SolanaSwift */; };
+		8353B4602F560B0A00F0BB59 /* TweetNacl in Frameworks */ = {isa = PBXBuildFile; productRef = 8344AF132F52C34A003D6892 /* TweetNacl */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		8344AEE32F52C34C003D6890 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +58,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8353B45E2F560B0A00F0BB57 /* StripePaymentSheet in Frameworks */,
+				8353B45F2F560B0A00F0BB58 /* SolanaSwift in Frameworks */,
+				8353B4602F560B0A00F0BB59 /* TweetNacl in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +121,9 @@
 			);
 			name = "Crypto miner";
 			packageProductDependencies = (
+				8344AF012F52C34A003D6890 /* StripePaymentSheet */,
+				8344AF112F52C34A003D6891 /* SolanaSwift */,
+				8344AF132F52C34A003D6892 /* TweetNacl */,
 			);
 			productName = "Crypto miner";
 			productReference = 8344AED32F52C34A003D6890 /* Crypto miner.app */;
@@ -195,6 +207,11 @@
 			);
 			mainGroup = 8344AECA2F52C34A003D6890;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8344AF002F52C34A003D6890 /* XCRemoteSwiftPackageReference "stripe-ios" */,
+				8344AF102F52C34A003D6891 /* XCRemoteSwiftPackageReference "solana-swift" */,
+				8344AF122F52C34A003D6892 /* XCRemoteSwiftPackageReference "tweetnacl-swiftwrap" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8344AED42F52C34A003D6890 /* Products */;
 			projectDirPath = "";
@@ -410,22 +427,19 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "Track.Crypto-miner";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
-				SDKROOT = auto;
+				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
-				XROS_DEPLOYMENT_TARGET = 26.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -454,22 +468,19 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "Track.Crypto-miner";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
-				SDKROOT = auto;
+				SDKROOT = iphoneos;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
-				XROS_DEPLOYMENT_TARGET = 26.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -615,6 +626,51 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8344AF002F52C34A003D6890 /* XCRemoteSwiftPackageReference "stripe-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stripe/stripe-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 24.0.0;
+			};
+		};
+		8344AF102F52C34A003D6891 /* XCRemoteSwiftPackageReference "solana-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/p2p-org/solana-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.0;
+			};
+		};
+		8344AF122F52C34A003D6892 /* XCRemoteSwiftPackageReference "tweetnacl-swiftwrap" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/bitmark-inc/tweetnacl-swiftwrap";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8344AF012F52C34A003D6890 /* StripePaymentSheet */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8344AF002F52C34A003D6890 /* XCRemoteSwiftPackageReference "stripe-ios" */;
+			productName = StripePaymentSheet;
+		};
+		8344AF112F52C34A003D6891 /* SolanaSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8344AF102F52C34A003D6891 /* XCRemoteSwiftPackageReference "solana-swift" */;
+			productName = SolanaSwift;
+		};
+		8344AF132F52C34A003D6892 /* TweetNacl */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8344AF122F52C34A003D6892 /* XCRemoteSwiftPackageReference "tweetnacl-swiftwrap" */;
+			productName = TweetNacl;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8344AECB2F52C34A003D6890 /* Project object */;
 }

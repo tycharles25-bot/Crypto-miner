@@ -1,0 +1,13 @@
+# Render Pump Server - PumpApi + pump detection for iOS app
+# Deploy: Connect repo → New Blueprint → Select render-pump-server/render.yaml
+
+services:
+  - type: web
+    name: render-pump-server
+    runtime: node
+    rootDir: render-pump-server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production

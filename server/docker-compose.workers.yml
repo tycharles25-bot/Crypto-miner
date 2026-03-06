@@ -1,0 +1,72 @@
+# VPN workers: each pair = different VPN server = different IP
+# Run: HUB_URL=https://your-hub.com docker compose -f docker-compose.workers.yml up -d
+#
+# Free: Windscribe (unlimited connections, 10GB/mo) or ProtonVPN (1 connection)
+# Paid: ProtonVPN Plus 10, NordVPN 6 - see VPN-SETUP.md
+
+services:
+  w1-vpn:
+    image: qmcgaw/gluetun
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun]
+    env_file: .env
+    environment:
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER:-protonvpn}
+      - VPN_TYPE=${VPN_TYPE:-wireguard}
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
+      - SERVER_COUNTRIES=United States
+    restart: unless-stopped
+
+  worker1:
+    build: .
+    network_mode: service:w1-vpn
+    depends_on: [w1-vpn]
+    environment:
+      - HUB_URL=${HUB_URL}
+    command: node worker.js
+    restart: unless-stopped
+
+  w2-vpn:
+    image: qmcgaw/gluetun
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun]
+    env_file: .env
+    environment:
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER:-protonvpn}
+      - VPN_TYPE=${VPN_TYPE:-wireguard}
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
+      - SERVER_COUNTRIES=United Kingdom
+    restart: unless-stopped
+
+  worker2:
+    build: .
+    network_mode: service:w2-vpn
+    depends_on: [w2-vpn]
+    environment:
+      - HUB_URL=${HUB_URL}
+    command: node worker.js
+    restart: unless-stopped
+
+  w3-vpn:
+    image: qmcgaw/gluetun
+    cap_add: [NET_ADMIN]
+    devices: [/dev/net/tun]
+    env_file: .env
+    environment:
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER:-protonvpn}
+      - VPN_TYPE=${VPN_TYPE:-wireguard}
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES}
+      - SERVER_COUNTRIES=Germany
+    restart: unless-stopped
+
+  worker3:
+    build: .
+    network_mode: service:w3-vpn
+    depends_on: [w3-vpn]
+    environment:
+      - HUB_URL=${HUB_URL}
+    command: node worker.js
+    restart: unless-stopped
