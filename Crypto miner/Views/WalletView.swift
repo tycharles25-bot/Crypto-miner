@@ -9,7 +9,7 @@ struct WalletView: View {
     @EnvironmentObject var wallet: WalletService
     @EnvironmentObject var dexTradeService: DEXTradeService
     @EnvironmentObject var solanaWallet: SolanaWalletService
-    @EnvironmentObject var solanaBalance: SolanaBalanceService
+    @Environment(SolanaBalanceService.self) var solanaBalance
     @State private var showDepositSheet = false
     @State private var showWithdrawSheet = false
     @State private var withdrawAmount = ""
@@ -45,7 +45,7 @@ struct WalletView: View {
                 Text("Solana wallet")
                     .font(.caption2)
                     .foregroundColor(.secondary.opacity(0.8))
-                Button(action: { solanaBalance.fetchBalance(publicKey: pub) }) {
+                Button(action: { Task { await solanaBalance.fetchBalance(publicKey: pub) } }) {
                     Text("Refresh")
                         .font(.caption)
                         .foregroundColor(.green)
@@ -215,7 +215,7 @@ struct WalletView: View {
                     Button("Cancel") {
                         showWithdrawSheet = false
                         withdrawAmount = ""
-                        transactionNote = ""
+                        withdrawAddress = ""
                         withdrawError = nil
                     }
                 }
@@ -236,5 +236,7 @@ struct WalletView: View {
         .environmentObject(WalletService())
         .environmentObject(DEXTradeService())
         .environmentObject(SolanaWalletService())
-        .environmentObject(SolanaBalanceService())
+        .environment(SolanaBalanceService())
+        .environmentObject(JupiterSwapService())
+        .environmentObject(RenderPumpService())
 }

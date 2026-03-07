@@ -91,6 +91,31 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+
+                Section("Jupiter (Swaps)") {
+                    TextField("API key (optional)", text: Binding(
+                        get: { JupiterConfig.apiKey },
+                        set: { JupiterConfig.apiKey = $0 }
+                    ))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    Text("Optional. Without key: uses lite-api. With key from portal.jup.ag: higher rate limits.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Section("Solana RPC (Helius recommended)") {
+                    TextField("https://mainnet.helius-rpc.com/?api_key=YOUR_KEY", text: Binding(
+                        get: { SolanaRPCConfig.rpcURL },
+                        set: { SolanaRPCConfig.rpcURL = $0 }
+                    ))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    Text("Required for reliable swaps. Free key at helius.dev")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 
                 Section("Contribute Data") {
                     Toggle("Share data with server", isOn: Binding(

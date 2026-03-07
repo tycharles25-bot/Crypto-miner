@@ -71,14 +71,16 @@ class DEXTradeService: ObservableObject {
     }
     
     /// Swap URL for buying (deposit). SOL/ETH -> token.
-    func swapURL(for pump: PumpAlert) -> URL? {
+    /// - Parameter amountLamports: Optional SOL amount for Jupiter pre-fill (?amount=)
+    func swapURL(for pump: PumpAlert, amountLamports: UInt64? = nil) -> URL? {
         guard pump.isDEX, let network = pump.network, let mint = pump.baseTokenMint else { return nil }
         
         switch network {
         case "solana":
-            // Jupiter: buy TOKEN with SOL. Format: inputMint-outputMint (SOL -> token)
             let sol = "So11111111111111111111111111111111111111112"
-            return URL(string: "https://jup.ag/swap/\(sol)-\(mint)")
+            var url = "https://jup.ag/swap/\(sol)-\(mint)"
+            if let amt = amountLamports, amt > 0 { url += "?amount=\(amt)" }
+            return URL(string: url)
         case "base":
             return URL(string: "https://app.uniswap.org/swap?outputCurrency=\(mint)&chain=base")
         case "eth":
@@ -133,6 +135,7 @@ class DEXTradeService: ObservableObject {
         pump: PumpAlert,
         cashoutAfterSeconds: TimeInterval? = nil,
         solanaWallet: SolanaWalletService? = nil,
+        solanaBalance: SolanaBalanceService? = nil,
         jupiterSwap: JupiterSwapService? = nil
     ) {
         guard isEnabled else { return }
@@ -141,6 +144,12 @@ class DEXTradeService: ObservableObject {
         
         let key = (pump.baseTokenMint ?? pump.displaySymbol) + "-" + (pump.network ?? "")
         if tradedSymbols.contains(key) { return }
+        
+        let minRequired = solPerTradeLamports + 150_000 // + ~0.00015 SOL for fees + priority (avoids error 1)
+        if let bal = solanaBalance?.balanceLamports, bal < minRequired {
+            errorMessage = "Insufficient SOL. Need \(String(format: "%.4f", Double(minRequired) / 1_000_000_000)) SOL (balance: \(String(format: "%.4f", Double(bal) / 1_000_000_000))). Lower SOL per trade in Wallet."
+            return
+        }
         
         let useAutoSwap = pump.network == "solana" && solanaWallet?.hasWallet == true && jupiterSwap != nil
         
@@ -151,7 +160,8 @@ class DEXTradeService: ObservableObject {
                         outputMint: mint,
                         solAmountLamports: solPerTradeLamports,
                         walletService: wallet,
-                        slippageBps: 100
+                        slippageBps: 1000,
+                        balanceLamports: solanaBalance?.balanceLamports
                     )
                     spentSoFar += perTradeAmount
                     tradedSymbols.insert(key)
@@ -167,38 +177,47 @@ class DEXTradeService: ObservableObject {
                 } catch {
                     errorMessage = error.localizedDescription
                     lastTrade = nil
-                    // Fallback: open URL
-                    if let url = swapURL(for: pump) {
-                        _ = await UIApplication.shared.open(url)
-                        spentSoFar += perTradeAmount
-                        tradedSymbols.insert(key)
-                        tradeCount += 1
-                        addTrade(symbol: pump.baseTokenMint.map { "\($0.prefix(6))...\($0.suffix(4))" } ?? pump.displaySymbol, action: "Buy", note: "Opened swap")
-                        if let secs = cashoutAfterSeconds, secs > 0 {
-                            let depositAt = Date()
-                            pendingCashouts.append((pump, depositAt, secs))
-                            scheduleCashout(pump: pump, depositAt: depositAt, cashoutAfterSeconds: secs)
+                    let isNoRoute = error.localizedDescription.lowercased().contains("no route")
+                    if isNoRoute {
+                        // Delayed retry: Jupiter may index token in ~45 sec
+                        try? await Task.sleep(nanoseconds: 45_000_000_000)
+                        do {
+                            let sig = try await jupiter.executeBuy(
+                                outputMint: mint,
+                                solAmountLamports: solPerTradeLamports,
+                                walletService: wallet,
+                                slippageBps: 1000,
+                                balanceLamports: solanaBalance?.balanceLamports
+                            )
+                            spentSoFar += perTradeAmount
+                            tradedSymbols.insert(key)
+                            tradeCount += 1
+                            addTrade(symbol: pump.baseTokenMint.map { "\($0.prefix(6))...\($0.suffix(4))" } ?? pump.displaySymbol, action: "Buy", note: "tx: \(String(sig.prefix(8)))... (retry)")
+                            lastTrade = "Bought \(pump.displaySymbol) (+\(Int(pump.priceChangePercent))%) tx: \(String(sig.prefix(8)))..."
+                            errorMessage = nil
+                            if let secs = cashoutAfterSeconds, secs > 0 {
+                                let depositAt = Date()
+                                pendingCashouts.append((pump, depositAt, secs))
+                                scheduleCashout(pump: pump, depositAt: depositAt, cashoutAfterSeconds: secs, jupiterSwap: jupiter, solanaWallet: wallet)
+                            }
+                        } catch {
+                            tradedSymbols.insert(key)
+                            addTrade(symbol: pump.baseTokenMint.map { "\($0.prefix(6))...\($0.suffix(4))" } ?? pump.displaySymbol, action: "Buy failed", note: error.localizedDescription)
                         }
+                    } else {
+                        addTrade(symbol: pump.baseTokenMint.map { "\($0.prefix(6))...\($0.suffix(4))" } ?? pump.displaySymbol, action: "Buy failed", note: error.localizedDescription)
                     }
                 }
             }
             return
         }
         
+        // No wallet imported — open Jupiter only, do NOT record as traded
         guard let url = swapURL(for: pump) else { return }
         UIApplication.shared.open(url)
-        spentSoFar += perTradeAmount
-        tradedSymbols.insert(key)
-        tradeCount += 1
-        addTrade(symbol: pump.baseTokenMint.map { "\($0.prefix(6))...\($0.suffix(4))" } ?? pump.displaySymbol, action: "Buy", note: "Opened swap")
-        lastTrade = "Opened \(pump.displaySymbol) swap (+\(Int(pump.priceChangePercent))%)"
-        errorMessage = nil
-        
-        if let secs = cashoutAfterSeconds, secs > 0 {
-            let depositAt = Date()
-            pendingCashouts.append((pump, depositAt, secs))
-            scheduleCashout(pump: pump, depositAt: depositAt, cashoutAfterSeconds: secs)
-        }
+        addTrade(symbol: pump.baseTokenMint.map { "\($0.prefix(6))...\($0.suffix(4))" } ?? pump.displaySymbol, action: "Buy failed", note: "No wallet imported")
+        lastTrade = "Opened \(pump.displaySymbol) — import a wallet in Settings for automatic trades"
+        errorMessage = "Import a Solana wallet in Settings for fully automatic swaps."
     }
     
     private func scheduleCashout(
@@ -221,7 +240,7 @@ class DEXTradeService: ObservableObject {
                     let sig = try await jupiter.executeSellAll(
                         inputMint: tokenMint,
                         walletService: wallet,
-                        slippageBps: 100
+                        slippageBps: 1000
                     )
                     addTrade(symbol: pump.displaySymbol, action: "Sell", note: "tx: \(String(sig.prefix(8)))...")
                     let hours = Int(cashoutAfterSeconds) / 3600
@@ -229,14 +248,14 @@ class DEXTradeService: ObservableObject {
                 } catch {
                     if let url = sellURL(for: pump) {
                         _ = await UIApplication.shared.open(url)
-                        addTrade(symbol: pump.displaySymbol, action: "Sell", note: "Opened cashout")
+                        addTrade(symbol: pump.displaySymbol, action: "Sell failed", note: "Opened cashout — complete in browser")
                         let hours = Int(cashoutAfterSeconds) / 3600
                         lastTrade = "Opened cashout for \(pump.displaySymbol) (\(hours)h elapsed)"
                     }
                 }
             } else if let url = sellURL(for: pump) {
                 _ = await UIApplication.shared.open(url)
-                addTrade(symbol: pump.displaySymbol, action: "Sell", note: "Opened cashout")
+                addTrade(symbol: pump.displaySymbol, action: "Sell failed", note: "Opened cashout — complete in browser")
                 let hours = Int(cashoutAfterSeconds) / 3600
                 lastTrade = "Opened cashout for \(pump.displaySymbol) (\(hours)h elapsed)"
             }

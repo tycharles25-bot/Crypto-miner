@@ -7,12 +7,12 @@
 
 import Foundation
 
-@MainActor
-class SolanaBalanceService: ObservableObject {
-    @Published var balanceLamports: UInt64?
-    @Published var lastError: String?
+@Observable
+final class SolanaBalanceService {
+    var balanceLamports: UInt64?
+    var lastError: String?
     
-    private let rpcURL = "https://api.mainnet-beta.solana.com"
+    private var rpcURL: String { SolanaRPCConfig.effectiveRPC }
     
     func fetchBalance(publicKey: String) async {
         let body: [String: Any] = [
@@ -23,7 +23,7 @@ class SolanaBalanceService: ObservableObject {
         ]
         guard let url = URL(string: rpcURL),
               let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
-            lastError = "Invalid request"
+            await MainActor.run { lastError = "Invalid request" }
             return
         }
         var request = URLRequest(url: url)
@@ -35,14 +35,18 @@ class SolanaBalanceService: ObservableObject {
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let result = json["result"] as? [String: Any],
                   let value = result["value"] as? Int else {
-                lastError = "Invalid response"
+                await MainActor.run { lastError = "Invalid response" }
                 return
             }
-            balanceLamports = UInt64(value)
-            lastError = nil
+            await MainActor.run {
+                balanceLamports = UInt64(value)
+                lastError = nil
+            }
         } catch {
-            lastError = error.localizedDescription
-            balanceLamports = nil
+            await MainActor.run {
+                lastError = error.localizedDescription
+                balanceLamports = nil
+            }
         }
     }
 }

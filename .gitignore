@@ -4,3 +4,6 @@ Crypto miner/Config.swift
 # Server env (contains private keys)
 server/.env
 server/workers.json
+
+# Cursor
+.cursor/

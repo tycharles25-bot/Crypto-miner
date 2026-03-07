@@ -10,14 +10,42 @@ const PUMPAPI_WS = 'wss://stream.pumpapi.io/';
 const RECONNECT_MS = 5000;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const WINDOW_MS = 10 * 60 * 1000; // 100% in 10 min
-const MIN_CHANGE = 100;
+const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '50', 10); // 50% default; lower for more alerts
+const MAX_CHANGE = 10000; // Cap unrealistic outliers (e.g. 66M% from tiny priceBefore)
 const MAX_ALERTS = 50;
+const SOL_MINT = 'So11111111111111111111111111111111111111112';
+const JUPITER_BASE = (process.env.JUPITER_API_KEY || '').trim() ? 'https://api.jup.ag' : 'https://lite-api.jup.ag';
+const ROUTE_CHECK_AMOUNT = 10_000_000; // 0.01 SOL lamports
+const NO_ROUTE_CACHE_MS = 3 * 60 * 1000; // Don't re-check failed mints for 3 min
+// Default true = report all pumps; set to false to only report tokens with Jupiter routes
+const SKIP_ROUTE_CHECK = (process.env.SKIP_JUPITER_ROUTE_CHECK || 'true').toLowerCase() === 'true';
 
 const priceHistory = new Map(); // mint -> [{ price, ts }]
+const noRouteCache = new Map(); // mint -> timestamp when we learned no route
 let recentAlerts = [];
 let wsClient = null;
 let reconnectTimer = null;
 let samplesTotal = 0;
+
+async function hasJupiterRoute(mint) {
+  if (noRouteCache.has(mint)) {
+    if (Date.now() - noRouteCache.get(mint) < NO_ROUTE_CACHE_MS) return false;
+    noRouteCache.delete(mint);
+  }
+  try {
+    const url = `${JUPITER_BASE}/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${mint}&amount=${ROUTE_CHECK_AMOUNT}&slippageBps=500&maxAccounts=64&restrictIntermediateTokens=false`;
+    const opts = {};
+    if (process.env.JUPITER_API_KEY) opts.headers = { 'x-api-key': process.env.JUPITER_API_KEY };
+    const res = await fetch(url, opts);
+    const json = await res.json();
+    if (json?.inputMint) return true;
+    noRouteCache.set(mint, Date.now());
+    return false;
+  } catch (_) {
+    noRouteCache.set(mint, Date.now());
+    return false;
+  }
+}
 
 function trimHistory() {
   const cutoff = Date.now() - MAX_AGE_MS;
@@ -44,6 +72,7 @@ function runPumpDetection() {
 
     const changePct = (priceNow / priceBefore - 1) * 100;
     if (changePct < MIN_CHANGE) continue;
+    if (changePct > MAX_CHANGE) continue; // Skip unrealistic outliers
 
     alerts.push({
       id: `pump_${mint}`,
@@ -75,10 +104,20 @@ function addSamples(samples) {
   for (const a of newAlerts) {
     if (!seen.has(a.baseTokenMint)) {
       seen.add(a.baseTokenMint);
-      recentAlerts.unshift(a);
+      if (SKIP_ROUTE_CHECK) {
+        recentAlerts.unshift(a);
+        recentAlerts.splice(MAX_ALERTS);
+      } else {
+        // Only add if Jupiter has a route (async check)
+        hasJupiterRoute(a.baseTokenMint).then((ok) => {
+          if (ok && !recentAlerts.some((x) => x.baseTokenMint === a.baseTokenMint)) {
+            recentAlerts.unshift(a);
+            recentAlerts.splice(MAX_ALERTS);
+          }
+        });
+      }
     }
   }
-  recentAlerts = recentAlerts.slice(0, MAX_ALERTS);
   trimHistory();
 }
 
@@ -98,21 +137,23 @@ function connect() {
   wsClient.on('message', (data) => {
     try {
       const ev = JSON.parse(data.toString());
-      if (ev?.txType !== 'buy' && ev?.txType !== 'sell') return;
+      const txType = ev?.txType || ev?.type;
+      if (txType !== 'buy' && txType !== 'sell') return;
 
       const mint = ev?.mint;
       if (!mint || mint === 'So11111111111111111111111111111111111111112') return;
 
       let price = ev?.price;
-      const solAmount = ev?.solAmount;
-      const tokenAmount = ev?.tokenAmount;
+      const solAmount = ev?.solAmount ?? ev?.sol_amount;
+      const tokenAmount = ev?.tokenAmount ?? ev?.token_amount;
       if (!price && solAmount != null && tokenAmount != null && tokenAmount > 0) {
-        price = solAmount / tokenAmount;
+        price = Number(solAmount) / Number(tokenAmount);
       }
+      price = Number(price);
       if (!price || price <= 0 || price >= 1e18) return;
 
-      const timestamp = ev?.timestamp || Date.now();
-      const priceLamports = price * 1e9;
+      const timestamp = ev?.timestamp ?? Date.now();
+      const priceLamports = Math.round(price * 1e9);
       addSamples([{ mint, price: priceLamports, timestamp }]);
     } catch (_) {}
   });
@@ -132,6 +173,10 @@ connect();
 const app = express();
 app.use(express.json());
 
+app.get('/', (_, res) => {
+  res.redirect('/status');
+});
+
 app.get('/alerts', (_, res) => {
   res.json({
     alerts: recentAlerts,
@@ -147,7 +192,29 @@ app.get('/status', (_, res) => {
     tokensTracked: priceHistory.size,
     samplesTotal,
     recentAlertsCount: recentAlerts.length,
+    minPumpPercent: MIN_CHANGE,
   });
+});
+
+// Debug: tokens with 50%+ gain (even if below MIN_CHANGE) — confirms detection is working
+app.get('/near-pumps', (_, res) => {
+  const now = Date.now();
+  const near = [];
+  for (const [mint, arr] of priceHistory) {
+    if (arr.length < 2) continue;
+    const priceNow = arr[0].price;
+    const tsNow = arr[0].ts;
+    if (tsNow < now - 10 * 60 * 1000) continue;
+    const targetBefore = now - WINDOW_MS;
+    const beforeCandidates = arr.filter((e) => e.ts <= targetBefore + 60000);
+    if (beforeCandidates.length < 1) continue;
+    const priceBefore = beforeCandidates[0].price;
+    if (priceBefore <= 0) continue;
+    const changePct = (priceNow / priceBefore - 1) * 100;
+    if (changePct >= 50) near.push({ mint: mint.slice(0, 8) + '...', changePct: Math.round(changePct) });
+  }
+  near.sort((a, b) => b.changePct - a.changePct);
+  res.json({ nearPumps: near.slice(0, 20), minThreshold: MIN_CHANGE });
 });
 
 app.get('/health', (_, res) => {

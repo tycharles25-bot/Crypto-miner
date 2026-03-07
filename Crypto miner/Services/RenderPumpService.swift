@@ -59,36 +59,44 @@ class RenderPumpService: ObservableObject {
             lastError = "Invalid server URL"
             return
         }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            let decoded = try JSONDecoder().decode(RenderAlertsResponse.self, from: data)
-            alerts = decoded.alerts.map { r in
-                PumpAlert(
-                    id: r.id,
-                    symbol: r.symbol,
-                    priceChangePercent: r.priceChangePercent,
-                    price: r.price,
-                    volume: 0,
-                    quoteVolume: 0,
-                    detectedAt: Date(),
-                    network: r.network,
-                    baseTokenMint: r.baseTokenMint
-                )
+        var lastErr: Error?
+        for attempt in 0..<3 {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let decoded = try JSONDecoder().decode(RenderAlertsResponse.self, from: data)
+                alerts = decoded.alerts.map { r in
+                    PumpAlert(
+                        id: r.id,
+                        symbol: r.symbol,
+                        priceChangePercent: r.priceChangePercent,
+                        price: r.price,
+                        volume: 0,
+                        quoteVolume: 0,
+                        detectedAt: Date(),
+                        network: r.network,
+                        baseTokenMint: r.baseTokenMint
+                    )
+                }
+                tokensTracked = decoded.tokensTracked ?? 0
+                samplesTotal = decoded.samplesTotal ?? 0
+                isConnected = true
+                lastError = nil
+                return
+            } catch {
+                lastErr = error
+                if attempt < 2 {
+                    try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 sec — Render free tier may be cold
+                }
             }
-            tokensTracked = decoded.tokensTracked ?? 0
-            samplesTotal = decoded.samplesTotal ?? 0
-            isConnected = true
-            lastError = nil
-        } catch {
-            lastError = error.localizedDescription
-            isConnected = false
         }
+        lastError = lastErr?.localizedDescription ?? "Failed to fetch alerts"
+        isConnected = false
     }
 }
 
 enum RenderConfig {
     static var serverURL: String {
-        get { UserDefaults.standard.string(forKey: "render_pump_server_url") ?? "https://render-pump-server.onrender.com" }
+        get { UserDefaults.standard.string(forKey: "render_pump_server_url") ?? "https://crypto-miner-0unq.onrender.com" }
         set { UserDefaults.standard.set(newValue, forKey: "render_pump_server_url") }
     }
 }

@@ -37,12 +37,27 @@ struct ContentView: View {
 struct PumpTrackerView: View {
     @EnvironmentObject var dexTradeService: DEXTradeService
     @EnvironmentObject var solanaWallet: SolanaWalletService
+    @Environment(SolanaBalanceService.self) var solanaBalance
     @EnvironmentObject var jupiterSwap: JupiterSwapService
     @EnvironmentObject var renderPump: RenderPumpService
     
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                if let err = dexTradeService.errorMessage {
+                    HStack {
+                        Text(err)
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                            .lineLimit(3)
+                        Spacer()
+                        Button("Dismiss") { dexTradeService.errorMessage = nil }
+                            .font(.caption)
+                            .foregroundColor(.white)
+                    }
+                    .padding(12)
+                    .background(Color.orange.opacity(0.2))
+                }
                 autoTradeToggle
                 lastTradedSection
                 pumpAlertsSection
@@ -55,18 +70,24 @@ struct PumpTrackerView: View {
             .onDisappear {
                 renderPump.stopPolling()
             }
-            .onChange(of: renderPump.alerts.count) { _, newAlerts in
+            .onChange(of: renderPump.alerts.first?.baseTokenMint ?? "") { _, _ in
                 guard dexTradeService.isEnabled else { return }
                 guard let newest = renderPump.alerts.first,
                       newest.network == "solana",
                       newest.baseTokenMint != nil else { return }
                 let cashoutSecs: TimeInterval = 3600
-                dexTradeService.tryTrade(
-                    pump: newest,
-                    cashoutAfterSeconds: cashoutSecs,
-                    solanaWallet: solanaWallet,
-                    jupiterSwap: jupiterSwap
-                )
+                Task {
+                    if let pub = solanaWallet.publicKey {
+                        await solanaBalance.fetchBalance(publicKey: pub)
+                    }
+                    dexTradeService.tryTrade(
+                        pump: newest,
+                        cashoutAfterSeconds: cashoutSecs,
+                        solanaWallet: solanaWallet,
+                        solanaBalance: solanaBalance,
+                        jupiterSwap: jupiterSwap
+                    )
+                }
             }
         }
     }
@@ -87,13 +108,13 @@ struct PumpTrackerView: View {
     
     private var lastTradedSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Last 10 traded")
+            Text("Last 10 attempts")
                 .font(.headline)
                 .foregroundColor(.white)
                 .padding(.horizontal)
             
             if dexTradeService.tradeHistory.isEmpty {
-                Text("No trades yet")
+                Text("No activity yet")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .frame(maxWidth: .infinity)
@@ -121,10 +142,16 @@ struct PumpTrackerView: View {
             if dexTradeService.pendingCashouts.isEmpty && renderPump.alerts.isEmpty {
                 Spacer()
                 if let err = renderPump.lastError {
-                    Text(err)
-                        .font(.subheadline)
-                        .foregroundColor(.orange)
-                        .padding()
+                    VStack(spacing: 8) {
+                        Text(err)
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
+                            .multilineTextAlignment(.center)
+                        Button("Retry") { Task { await renderPump.fetchAlerts() } }
+                            .font(.subheadline)
+                            .foregroundColor(.green)
+                    }
+                    .padding()
                 } else if !renderPump.isConnected {
                     ProgressView("Connecting to pump server...")
                         .foregroundColor(.secondary)
@@ -135,6 +162,13 @@ struct PumpTrackerView: View {
                     Text("No pumps yet")
                         .font(.title3)
                         .foregroundColor(.secondary)
+                    if renderPump.tokensTracked > 0 {
+                        Text("Tracking \(renderPump.tokensTracked) tokens — need 50%+ gain in 10 min")
+                            .font(.caption)
+                            .foregroundColor(.secondary.opacity(0.8))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
                     Text("Server: \(renderPump.serverURL)")
                         .font(.caption)
                         .foregroundColor(.secondary.opacity(0.8))
@@ -204,17 +238,38 @@ struct TradedTokenChip: View {
     let symbol: String
     let action: String
     let date: Date
-    
+
+    private var iconName: String {
+        switch action {
+        case "Buy": return "arrow.down.circle.fill"
+        case "Sell": return "arrow.up.circle.fill"
+        case "Buy failed", "Sell failed": return "xmark.circle.fill"
+        default: return "questionmark.circle"
+        }
+    }
+
+    private var iconColor: Color {
+        switch action {
+        case "Buy": return .green
+        case "Sell": return .orange
+        case "Buy failed", "Sell failed": return .red
+        default: return .secondary
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
-                Image(systemName: action == "Buy" ? "arrow.down.circle.fill" : "arrow.up.circle.fill")
+                Image(systemName: iconName)
                     .font(.caption)
-                    .foregroundColor(action == "Buy" ? .green : .orange)
+                    .foregroundColor(iconColor)
                 Text(symbol)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.white)
+                Text(action)
+                    .font(.caption2)
+                    .foregroundColor(iconColor)
             }
             Text(date, style: .relative)
                 .font(.caption2)
@@ -250,6 +305,7 @@ struct CashoutCountdownRow: View {
         .environmentObject(WalletService())
         .environmentObject(DEXTradeService())
         .environmentObject(SolanaWalletService())
+        .environment(SolanaBalanceService())
         .environmentObject(JupiterSwapService())
         .environmentObject(RenderPumpService())
 }
