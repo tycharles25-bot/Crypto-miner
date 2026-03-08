@@ -65,7 +65,10 @@ function runPumpDetection() {
     if (tsNow < now - 5 * 60 * 1000) continue;
 
     const targetBefore = now - WINDOW_MS;
-    const beforeCandidates = arr.filter((e) => e.ts <= targetBefore + 60000);
+    // Only use prices from 8–12 min ago — avoid comparing to hours-old data (false pumps)
+    const beforeCandidates = arr.filter((e) =>
+      e.ts <= targetBefore + 60000 && e.ts >= targetBefore - 60000
+    );
     if (beforeCandidates.length < 1) continue;
     const priceBefore = beforeCandidates[0].price;
     if (priceBefore <= 0) continue;
@@ -206,7 +209,10 @@ app.get('/near-pumps', (_, res) => {
     const tsNow = arr[0].ts;
     if (tsNow < now - 10 * 60 * 1000) continue;
     const targetBefore = now - WINDOW_MS;
-    const beforeCandidates = arr.filter((e) => e.ts <= targetBefore + 60000);
+    // Only use prices from 8–12 min ago — avoid comparing to hours-old data (false pumps)
+    const beforeCandidates = arr.filter((e) =>
+      e.ts <= targetBefore + 60000 && e.ts >= targetBefore - 60000
+    );
     if (beforeCandidates.length < 1) continue;
     const priceBefore = beforeCandidates[0].price;
     if (priceBefore <= 0) continue;
