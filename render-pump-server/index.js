@@ -13,6 +13,7 @@ const WINDOW_MS = 5 * 60 * 1000; // 50% in 5 min
 const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '50', 10); // 50% in 5 min
 const MAX_CHANGE = 10000; // Cap unrealistic outliers (e.g. 66M% from tiny priceBefore)
 const MAX_ALERTS = 50;
+const ALERT_MAX_AGE_MS = 15 * 60 * 1000; // Expire alerts after 15 min (match sell window)
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const JUPITER_BASE = (process.env.JUPITER_API_KEY || '').trim() ? 'https://api.jup.ag' : 'https://lite-api.jup.ag';
 const ROUTE_CHECK_AMOUNT = 10_000_000; // 0.01 SOL lamports
@@ -70,6 +71,9 @@ function runPumpDetection() {
       e.ts <= targetBefore + 60000 && e.ts >= targetBefore - 60000
     );
     if (beforeCandidates.length < 1) continue;
+    // Require at least 2 samples in last 6 min to avoid sparse-data false pumps
+    const recentSamples = arr.filter((e) => e.ts >= targetBefore - 60000);
+    if (recentSamples.length < 2) continue;
     const priceBefore = beforeCandidates[0].price;
     if (priceBefore <= 0) continue;
 
@@ -122,6 +126,9 @@ function addSamples(samples) {
     }
   }
   trimHistory();
+  // Prune expired alerts from memory
+  const cutoff = Date.now() - ALERT_MAX_AGE_MS;
+  recentAlerts = recentAlerts.filter((a) => (a.detectedAt || 0) > cutoff);
 }
 
 function connect() {
@@ -180,9 +187,14 @@ app.get('/', (_, res) => {
   res.redirect('/status');
 });
 
+function getFreshAlerts() {
+  const cutoff = Date.now() - ALERT_MAX_AGE_MS;
+  return recentAlerts.filter((a) => (a.detectedAt || 0) > cutoff);
+}
+
 app.get('/alerts', (_, res) => {
   res.json({
-    alerts: recentAlerts,
+    alerts: getFreshAlerts(),
     tokensTracked: priceHistory.size,
     samplesTotal,
   });
@@ -194,8 +206,9 @@ app.get('/status', (_, res) => {
     pumpApiConnected: wsClient?.readyState === 1,
     tokensTracked: priceHistory.size,
     samplesTotal,
-    recentAlertsCount: recentAlerts.length,
+    recentAlertsCount: getFreshAlerts().length,
     minPumpPercent: MIN_CHANGE,
+    alertMaxAgeMinutes: ALERT_MAX_AGE_MS / 60000,
   });
 });
 
