@@ -75,7 +75,7 @@ struct PumpTrackerView: View {
                 guard let newest = renderPump.alerts.first,
                       newest.network == "solana",
                       newest.baseTokenMint != nil else { return }
-                let cashoutSecs: TimeInterval = 15 * 60 // 15 minutes
+                let cashoutSecs: TimeInterval = TimeInterval(CashoutConfig.minutes) * 60
                 Task {
                     if let pub = solanaWallet.publicKey {
                         await solanaBalance.fetchBalance(publicKey: pub)
@@ -163,7 +163,7 @@ struct PumpTrackerView: View {
                         .font(.title3)
                         .foregroundColor(.secondary)
                     if renderPump.tokensTracked > 0 {
-                        Text("Tracking \(renderPump.tokensTracked) tokens — need 50%+ gain in 10 min")
+                        Text("Tracking \(renderPump.tokensTracked) tokens — need 50%+ gain in 5 min")
                             .font(.caption)
                             .foregroundColor(.secondary.opacity(0.8))
                             .multilineTextAlignment(.center)

@@ -100,3 +100,15 @@ enum RenderConfig {
         set { UserDefaults.standard.set(newValue, forKey: "render_pump_server_url") }
     }
 }
+
+enum CashoutConfig {
+    static var minutes: Int {
+        get {
+            let v = UserDefaults.standard.integer(forKey: "cashout_minutes")
+            return v > 0 ? v : 15
+        }
+        set {
+            UserDefaults.standard.set(max(1, min(1440, newValue)), forKey: "cashout_minutes")
+        }
+    }
+}
