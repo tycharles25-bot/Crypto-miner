@@ -91,9 +91,9 @@ function loadWallet() {
 
 function getCashoutSeconds() {
   const def = PUMP_DEFINITION;
-  if (def === 'hundredPerc10min') return 3600;
-  if (def === 'fiftyPerc20min') return 7200;
-  return 3600;
+  if (def === 'hundredPerc10min') return 15 * 60; // 15 min
+  if (def === 'fiftyPerc20min') return 15 * 60; // 15 min
+  return 15 * 60; // 15 min
 }
 
 function useSource(name) {

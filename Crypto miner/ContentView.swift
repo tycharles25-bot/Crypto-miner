@@ -75,7 +75,7 @@ struct PumpTrackerView: View {
                 guard let newest = renderPump.alerts.first,
                       newest.network == "solana",
                       newest.baseTokenMint != nil else { return }
-                let cashoutSecs: TimeInterval = 3600
+                let cashoutSecs: TimeInterval = 15 * 60 // 15 minutes
                 Task {
                     if let pub = solanaWallet.publicKey {
                         await solanaBalance.fetchBalance(publicKey: pub)
