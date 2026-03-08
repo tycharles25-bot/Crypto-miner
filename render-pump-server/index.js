@@ -9,8 +9,8 @@ import WebSocket from 'ws';
 const PUMPAPI_WS = 'wss://stream.pumpapi.io/';
 const RECONNECT_MS = 5000;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const WINDOW_MS = 10 * 60 * 1000; // 100% in 10 min
-const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '100', 10); // 100% = must double in 10 min; avoids tiny-absolute-move false pumps
+const WINDOW_MS = 5 * 60 * 1000; // 50% in 5 min
+const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '50', 10); // 50% in 5 min
 const MAX_CHANGE = 10000; // Cap unrealistic outliers (e.g. 66M% from tiny priceBefore)
 const MAX_ALERTS = 50;
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -65,7 +65,7 @@ function runPumpDetection() {
     if (tsNow < now - 5 * 60 * 1000) continue;
 
     const targetBefore = now - WINDOW_MS;
-    // Only use prices from 9–11 min ago (centered on 10 min) — avoid comparing to hours-old data (false pumps)
+    // Only use prices from 4–6 min ago (centered on 5 min) — avoid comparing to hours-old data (false pumps)
     const beforeCandidates = arr.filter((e) =>
       e.ts <= targetBefore + 60000 && e.ts >= targetBefore - 60000
     );
@@ -209,7 +209,7 @@ app.get('/near-pumps', (_, res) => {
     const tsNow = arr[0].ts;
     if (tsNow < now - 10 * 60 * 1000) continue;
     const targetBefore = now - WINDOW_MS;
-    // Only use prices from 9–11 min ago (centered on 10 min) — avoid comparing to hours-old data (false pumps)
+    // Only use prices from 4–6 min ago (centered on 5 min) — avoid comparing to hours-old data (false pumps)
     const beforeCandidates = arr.filter((e) =>
       e.ts <= targetBefore + 60000 && e.ts >= targetBefore - 60000
     );
