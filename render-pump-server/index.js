@@ -9,11 +9,11 @@ import WebSocket from 'ws';
 const PUMPAPI_WS = 'wss://stream.pumpapi.io/';
 const RECONNECT_MS = 5000;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const WINDOW_MS = 5 * 60 * 1000; // 50% in 5 min
-const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '50', 10); // 50% in 5 min
+const WINDOW_MS = 1 * 60 * 1000; // 300% in 1 min — strict, no slip ups
+const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '300', 10); // 300% in 1 min
 const MAX_CHANGE = 10000; // Cap unrealistic outliers (e.g. 66M% from tiny priceBefore)
 const MAX_ALERTS = 50;
-const ALERT_MAX_AGE_MS = 15 * 60 * 1000; // Expire alerts after 15 min (match sell window)
+const ALERT_MAX_AGE_MS = 5 * 60 * 1000; // Expire alerts after 5 min (match sell window)
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const JUPITER_BASE = (process.env.JUPITER_API_KEY || '').trim() ? 'https://api.jup.ag' : 'https://lite-api.jup.ag';
 const ROUTE_CHECK_AMOUNT = 10_000_000; // 0.01 SOL lamports
@@ -63,15 +63,15 @@ function runPumpDetection() {
     if (arr.length < 2) continue;
     const priceNow = arr[0].price;
     const tsNow = arr[0].ts;
-    if (tsNow < now - 5 * 60 * 1000) continue;
+    if (tsNow < now - 2 * 60 * 1000) continue; // priceNow must be within 2 min
 
     const targetBefore = now - WINDOW_MS;
-    // Only use prices from 4–6 min ago (centered on 5 min) — avoid comparing to hours-old data (false pumps)
+    // Only use prices from 0.5–1.5 min ago (centered on 1 min) — strict 1-min window
     const beforeCandidates = arr.filter((e) =>
-      e.ts <= targetBefore + 60000 && e.ts >= targetBefore - 60000
+      e.ts <= targetBefore + 30000 && e.ts >= targetBefore - 30000
     );
     if (beforeCandidates.length < 1) continue;
-    // Require at least 2 samples in last 6 min to avoid sparse-data false pumps
+    // Require at least 2 samples in last 2 min to avoid sparse-data false pumps
     const recentSamples = arr.filter((e) => e.ts >= targetBefore - 60000);
     if (recentSamples.length < 2) continue;
     const priceBefore = beforeCandidates[0].price;
@@ -212,7 +212,7 @@ app.get('/status', (_, res) => {
   });
 });
 
-// Debug: tokens with 50%+ gain (even if below MIN_CHANGE) — confirms detection is working
+// Debug: tokens with 300%+ gain in 1 min — confirms detection is working
 app.get('/near-pumps', (_, res) => {
   const now = Date.now();
   const near = [];
@@ -220,11 +220,10 @@ app.get('/near-pumps', (_, res) => {
     if (arr.length < 2) continue;
     const priceNow = arr[0].price;
     const tsNow = arr[0].ts;
-    if (tsNow < now - 10 * 60 * 1000) continue;
+    if (tsNow < now - 2 * 60 * 1000) continue;
     const targetBefore = now - WINDOW_MS;
-    // Only use prices from 4–6 min ago (centered on 5 min) — avoid comparing to hours-old data (false pumps)
     const beforeCandidates = arr.filter((e) =>
-      e.ts <= targetBefore + 60000 && e.ts >= targetBefore - 60000
+      e.ts <= targetBefore + 30000 && e.ts >= targetBefore - 30000
     );
     if (beforeCandidates.length < 1) continue;
     const priceBefore = beforeCandidates[0].price;

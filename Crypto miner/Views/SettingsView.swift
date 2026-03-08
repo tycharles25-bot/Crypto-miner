@@ -10,7 +10,7 @@ struct SettingsView: View {
     @EnvironmentObject var dexTradeService: DEXTradeService
     @State private var showImportSheet = false
     @AppStorage("app_theme") private var appTheme = "system"
-    @AppStorage("cashout_minutes") private var cashoutMinutes: Int = 15
+    @AppStorage("cashout_minutes") private var cashoutMinutes: Int = 5
     
     var body: some View {
         NavigationStack {
@@ -82,7 +82,7 @@ struct SettingsView: View {
                 
                 Section("Auto-Trade") {
                     Stepper("Sell after \(cashoutMinutes) min", value: $cashoutMinutes, in: 1...1440, step: 5)
-                    Text("Tokens auto-sell this many minutes after buy. Change takes effect for new buys.")
+                    Text("Tokens auto-sell this many minutes after buy. Default: 5. Change takes effect for new buys.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -153,7 +153,7 @@ struct SettingsView: View {
                 SolanaWalletImportView(solanaWallet: solanaWallet, onDismiss: { showImportSheet = false })
             }
             .onAppear {
-                if cashoutMinutes < 1 { cashoutMinutes = 15 }
+                if cashoutMinutes < 1 { cashoutMinutes = 5 }
             }
         }
     }

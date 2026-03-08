@@ -90,10 +90,7 @@ function loadWallet() {
 }
 
 function getCashoutSeconds() {
-  const def = PUMP_DEFINITION;
-  if (def === 'hundredPerc10min') return 15 * 60; // 15 min
-  if (def === 'fiftyPerc20min') return 15 * 60; // 15 min
-  return 15 * 60; // 15 min
+  return 5 * 60; // 5 min — strict 300%/1min criteria
 }
 
 function useSource(name) {
