@@ -21,7 +21,9 @@ const NO_ROUTE_CACHE_MS = 3 * 60 * 1000; // Don't re-check failed mints for 3 mi
 // Default true = report all pumps; set to false to only report tokens with Jupiter routes
 const SKIP_ROUTE_CHECK = (process.env.SKIP_JUPITER_ROUTE_CHECK || 'true').toLowerCase() === 'true';
 
-const priceHistory = new Map(); // mint -> [{ price, ts }]
+const priceHistory = new Map(); // mint -> [{ price, ts, solAmount }]
+const MIN_PRICE_LAMPORTS = 50_000; // ~$0.00005 — skip micro-cap noise
+const MIN_SOL_VOLUME = 0.3; // Require 0.3 SOL traded in window — filter wash trades
 const noRouteCache = new Map(); // mint -> timestamp when we learned no route
 let recentAlerts = [];
 let wsClient = null;
@@ -73,11 +75,17 @@ function runPumpDetection() {
       e.ts <= targetBefore + 30000 && e.ts >= targetBefore - 30000
     );
     if (beforeCandidates.length < 1) continue;
-    // Require at least 3 samples in last 3 min to avoid sparse-data false pumps
+    // Require at least 5 samples in last 3 min to avoid sparse-data false pumps
     const recentSamples = arr.filter((e) => e.ts >= targetBefore - 60000);
-    if (recentSamples.length < 3) continue;
+    if (recentSamples.length < 5) continue;
     const priceBefore = beforeCandidates[0].price;
     if (priceBefore <= 0) continue;
+    if (priceBefore < MIN_PRICE_LAMPORTS) continue; // Skip micro-cap noise
+
+    // Require minimum SOL volume in window — filter wash trades / manipulation
+    const windowTrades = arr.filter((e) => e.ts >= targetBefore - 60000 && e.ts <= now);
+    const solVolume = windowTrades.reduce((sum, e) => sum + (e.solAmount || 0), 0);
+    if (solVolume < MIN_SOL_VOLUME) continue;
 
     const changePct = (priceNow / priceBefore - 1) * 100;
     if (changePct < MIN_CHANGE) continue;
@@ -103,7 +111,7 @@ function addSamples(samples) {
       arr = [];
       priceHistory.set(s.mint, arr);
     }
-    arr.push({ price: s.price, ts: s.timestamp });
+    arr.push({ price: s.price, ts: s.timestamp, solAmount: s.solAmount ?? 0 });
     arr.sort((a, b) => b.ts - a.ts);
   }
   samplesTotal += samples.length;
@@ -168,7 +176,8 @@ function connect() {
 
       const timestamp = ev?.timestamp ?? Date.now();
       const priceLamports = Math.round(price * 1e9);
-      addSamples([{ mint, price: priceLamports, timestamp }]);
+      const solAmount = Number(ev?.solAmount ?? ev?.sol_amount ?? 0);
+      addSamples([{ mint, price: priceLamports, timestamp, solAmount }]);
     } catch (_) {}
   });
 
