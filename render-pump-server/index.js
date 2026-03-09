@@ -24,13 +24,61 @@ const SKIP_ROUTE_CHECK = (process.env.SKIP_JUPITER_ROUTE_CHECK || 'true').toLowe
 const priceHistory = new Map(); // mint -> [{ price, ts, solAmount, isBuy }]
 const MIN_PRICE_LAMPORTS = 50_000; // ~$0.00005 — skip micro-cap noise
 const MIN_SOL_VOLUME = 0.5; // Require 0.5 SOL traded in window — filter wash trades
+const MIN_UNIQUE_TRADERS = parseInt(process.env.MIN_UNIQUE_TRADERS || '5', 10); // Min unique traders in window — proxy for holder interest
+const MIN_HOLDERS = parseInt(process.env.MIN_HOLDERS || '150', 10); // Min token holders (requires SOLANA_RPC_URL)
+const MAX_HOLDERS = parseInt(process.env.MAX_HOLDERS || '300', 10); // Max token holders — filter late pumps
+const SOLANA_RPC_URL = (process.env.SOLANA_RPC_URL || '').trim();
+const HOLDER_CACHE_MS = 2 * 60 * 1000; // Cache holder count 2 min
 const noRouteCache = new Map(); // mint -> timestamp when we learned no route
+const holderCache = new Map(); // mint -> { count, ts }
 let recentAlerts = [];
 let wsClient = null;
 let reconnectTimer = null;
 let samplesTotal = 0;
 let lastWsError = null;
 let lastWsClose = null;
+
+/** Fetch token holder count via Solana RPC getProgramAccounts. Returns null on error. */
+async function getHolderCount(mint) {
+  if (!SOLANA_RPC_URL) return null;
+  const cached = holderCache.get(mint);
+  if (cached && Date.now() - cached.ts < HOLDER_CACHE_MS) return cached.count;
+  try {
+    const body = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getProgramAccounts',
+      params: [
+        'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+        {
+          encoding: 'base64',
+          filters: [{ memcmp: { offset: 0, bytes: mint } }],
+          dataSlice: { offset: 0, length: 0 },
+        },
+      ],
+    };
+    const res = await fetch(SOLANA_RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await res.json();
+    const accounts = json?.result ?? [];
+    const count = Array.isArray(accounts) ? accounts.length : 0;
+    holderCache.set(mint, { count, ts: Date.now() });
+    return count;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Returns true if holder count is within range (150–300). If RPC unavailable, passes. */
+async function passesHolderFilter(mint) {
+  if (!SOLANA_RPC_URL) return true;
+  const count = await getHolderCount(mint);
+  if (count == null) return true; // On error, allow (don't block on RPC failures)
+  return count >= MIN_HOLDERS && count <= MAX_HOLDERS;
+}
 
 async function hasJupiterRoute(mint) {
   if (noRouteCache.has(mint)) {
@@ -101,6 +149,15 @@ function runPumpDetection() {
     const solVolume = windowTrades.reduce((sum, e) => sum + (e.solAmount || 0), 0);
     if (solVolume < MIN_SOL_VOLUME) continue;
 
+    // Require minimum unique traders — proxy for holder interest, filter low-activity tokens
+    const uniqueTraders = new Set();
+    for (const e of windowTrades) {
+      for (const addr of e.traders || []) {
+        if (addr && typeof addr === 'string') uniqueTraders.add(addr);
+      }
+    }
+    if (uniqueTraders.size < MIN_UNIQUE_TRADERS) continue;
+
     const changePct = (priceNow / priceBefore - 1) * 100;
     if (changePct < MIN_CHANGE) continue;
     if (changePct > MAX_CHANGE) continue; // Skip unrealistic outliers
@@ -125,7 +182,13 @@ function addSamples(samples) {
       arr = [];
       priceHistory.set(s.mint, arr);
     }
-    arr.push({ price: s.price, ts: s.timestamp, solAmount: s.solAmount ?? 0, isBuy: s.isBuy ?? true });
+    arr.push({
+      price: s.price,
+      ts: s.timestamp,
+      solAmount: s.solAmount ?? 0,
+      isBuy: s.isBuy ?? true,
+      traders: s.traders ?? [],
+    });
     arr.sort((a, b) => b.ts - a.ts);
   }
   samplesTotal += samples.length;
@@ -135,18 +198,16 @@ function addSamples(samples) {
   for (const a of newAlerts) {
     if (!seen.has(a.baseTokenMint)) {
       seen.add(a.baseTokenMint);
-      if (SKIP_ROUTE_CHECK) {
-        recentAlerts.unshift(a);
-        recentAlerts.splice(MAX_ALERTS);
-      } else {
-        // Only add if Jupiter has a route (async check)
-        hasJupiterRoute(a.baseTokenMint).then((ok) => {
-          if (ok && !recentAlerts.some((x) => x.baseTokenMint === a.baseTokenMint)) {
-            recentAlerts.unshift(a);
-            recentAlerts.splice(MAX_ALERTS);
-          }
-        });
-      }
+      const addIfPasses = async () => {
+        const okHolder = await passesHolderFilter(a.baseTokenMint);
+        if (!okHolder) return;
+        const okRoute = SKIP_ROUTE_CHECK || (await hasJupiterRoute(a.baseTokenMint));
+        if (okRoute && !recentAlerts.some((x) => x.baseTokenMint === a.baseTokenMint)) {
+          recentAlerts.unshift(a);
+          recentAlerts.splice(MAX_ALERTS);
+        }
+      };
+      addIfPasses();
     }
   }
   trimHistory();
@@ -180,19 +241,24 @@ function connect() {
       if (!mint || mint === 'So11111111111111111111111111111111111111112') return;
 
       let price = ev?.price;
-      const solAmount = ev?.solAmount ?? ev?.sol_amount;
+      const solAmount = Number(ev?.solAmount ?? ev?.sol_amount ?? 0);
       const tokenAmount = ev?.tokenAmount ?? ev?.token_amount;
-      if (!price && solAmount != null && tokenAmount != null && tokenAmount > 0) {
-        price = Number(solAmount) / Number(tokenAmount);
+      if (!price && solAmount > 0 && tokenAmount != null && tokenAmount > 0) {
+        price = solAmount / Number(tokenAmount);
       }
       price = Number(price);
       if (!price || price <= 0 || price >= 1e18) return;
 
       const timestamp = ev?.timestamp ?? Date.now();
       const priceLamports = Math.round(price * 1e9);
-      const solAmount = Number(ev?.solAmount ?? ev?.sol_amount ?? 0);
       const isBuy = txType === 'buy';
-      addSamples([{ mint, price: priceLamports, timestamp, solAmount, isBuy }]);
+      const traders = [];
+      const txSigner = ev?.txSigner;
+      if (txSigner) traders.push(txSigner);
+      const involved = ev?.tradersInvolved;
+      if (Array.isArray(involved)) traders.push(...involved);
+      else if (involved && typeof involved === 'object') traders.push(...Object.keys(involved));
+      addSamples([{ mint, price: priceLamports, timestamp, solAmount, isBuy, traders }]);
     } catch (_) {}
   });
 
@@ -242,6 +308,10 @@ app.get('/status', (_, res) => {
     samplesTotal,
     recentAlertsCount: getFreshAlerts().length,
     minPumpPercent: MIN_CHANGE,
+    minUniqueTraders: MIN_UNIQUE_TRADERS,
+    minHolders: MIN_HOLDERS,
+    maxHolders: MAX_HOLDERS,
+    holderFilterEnabled: !!SOLANA_RPC_URL,
     alertMaxAgeMinutes: ALERT_MAX_AGE_MS / 60000,
     lastWsError: lastWsError || null,
     lastWsClose: lastWsClose || null,
