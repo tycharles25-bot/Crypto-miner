@@ -65,7 +65,7 @@ function runPumpDetection() {
     if (arr.length < 2) continue;
     const priceNow = arr[0].price;
     const tsNow = arr[0].ts;
-    if (tsNow < now - 4 * 60 * 1000) continue; // priceNow must be within 4 min (recent)
+    if (tsNow < now - 3 * 60 * 1000) continue; // priceNow must be within 2-3 min (recent)
 
     const targetBefore = now - WINDOW_MS;
     // Only use prices from 2.5–3.5 min ago — strictly the previous 3 min, recent only
@@ -73,7 +73,7 @@ function runPumpDetection() {
       e.ts <= targetBefore + 30000 && e.ts >= targetBefore - 30000
     );
     if (beforeCandidates.length < 1) continue;
-    // Require at least 3 samples in last 4 min to avoid sparse-data false pumps
+    // Require at least 3 samples in last 3 min to avoid sparse-data false pumps
     const recentSamples = arr.filter((e) => e.ts >= targetBefore - 60000);
     if (recentSamples.length < 3) continue;
     const priceBefore = beforeCandidates[0].price;
@@ -229,7 +229,7 @@ app.get('/near-pumps', (_, res) => {
     if (arr.length < 2) continue;
     const priceNow = arr[0].price;
     const tsNow = arr[0].ts;
-    if (tsNow < now - 4 * 60 * 1000) continue;
+    if (tsNow < now - 3 * 60 * 1000) continue;
     const targetBefore = now - WINDOW_MS;
     const beforeCandidates = arr.filter((e) =>
       e.ts <= targetBefore + 30000 && e.ts >= targetBefore - 30000
