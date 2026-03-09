@@ -248,9 +248,12 @@ app.get('/near-pumps', (_, res) => {
     );
     if (beforeCandidates.length < 1) continue;
     const recentSamples = arr.filter((e) => e.ts >= targetBefore - 60000);
-    if (recentSamples.length < 3) continue;
+    if (recentSamples.length < 5) continue;
     const priceBefore = beforeCandidates[0].price;
-    if (priceBefore <= 0) continue;
+    if (priceBefore <= 0 || priceBefore < MIN_PRICE_LAMPORTS) continue;
+    const windowTrades = arr.filter((e) => e.ts >= targetBefore - 60000 && e.ts <= now);
+    const solVolume = windowTrades.reduce((sum, e) => sum + (e.solAmount || 0), 0);
+    if (solVolume < MIN_SOL_VOLUME) continue;
     const changePct = (priceNow / priceBefore - 1) * 100;
     if (changePct >= MIN_CHANGE) near.push({ mint: mint.slice(0, 8) + '...', changePct: Math.round(changePct) });
   }
