@@ -9,8 +9,8 @@ import WebSocket from 'ws';
 const PUMPAPI_WS = 'wss://stream.pumpapi.io/';
 const RECONNECT_MS = 5000;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const WINDOW_MS = 2 * 60 * 1000; // 300% in 2 min — strict, no random tokens
-const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '300', 10); // 300% in 2 min
+const WINDOW_MS = 5 * 60 * 1000; // 300% in 5 min
+const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '300', 10); // 300% in 5 min
 const MAX_CHANGE = 10000; // Cap unrealistic outliers (e.g. 66M% from tiny priceBefore)
 const MAX_ALERTS = 50;
 const ALERT_MAX_AGE_MS = 5 * 60 * 1000; // Expire alerts after 5 min (match sell window)
@@ -63,15 +63,15 @@ function runPumpDetection() {
     if (arr.length < 2) continue;
     const priceNow = arr[0].price;
     const tsNow = arr[0].ts;
-    if (tsNow < now - 3 * 60 * 1000) continue; // priceNow must be within 3 min
+    if (tsNow < now - 6 * 60 * 1000) continue; // priceNow must be within 6 min
 
     const targetBefore = now - WINDOW_MS;
-    // Only use prices from 1.5–2.5 min ago — strictly the previous 2 min, never older
+    // Only use prices from 4–6 min ago (centered on 5 min)
     const beforeCandidates = arr.filter((e) =>
-      e.ts <= targetBefore + 30000 && e.ts >= targetBefore - 30000
+      e.ts <= targetBefore + 60000 && e.ts >= targetBefore - 60000
     );
     if (beforeCandidates.length < 1) continue;
-    // Require at least 3 samples in last 3 min to avoid sparse-data false pumps
+    // Require at least 3 samples in last 6 min to avoid sparse-data false pumps
     const recentSamples = arr.filter((e) => e.ts >= targetBefore - 60000);
     if (recentSamples.length < 3) continue;
     const priceBefore = beforeCandidates[0].price;
@@ -212,7 +212,7 @@ app.get('/status', (_, res) => {
   });
 });
 
-// Debug: tokens with 300%+ gain in 2 min — confirms detection is working
+// Debug: tokens with 300%+ gain in 5 min — confirms detection is working
 app.get('/near-pumps', (_, res) => {
   const now = Date.now();
   const near = [];
@@ -220,10 +220,10 @@ app.get('/near-pumps', (_, res) => {
     if (arr.length < 2) continue;
     const priceNow = arr[0].price;
     const tsNow = arr[0].ts;
-    if (tsNow < now - 3 * 60 * 1000) continue;
+    if (tsNow < now - 6 * 60 * 1000) continue;
     const targetBefore = now - WINDOW_MS;
     const beforeCandidates = arr.filter((e) =>
-      e.ts <= targetBefore + 30000 && e.ts >= targetBefore - 30000
+      e.ts <= targetBefore + 60000 && e.ts >= targetBefore - 60000
     );
     if (beforeCandidates.length < 1) continue;
     const recentSamples = arr.filter((e) => e.ts >= targetBefore - 60000);
