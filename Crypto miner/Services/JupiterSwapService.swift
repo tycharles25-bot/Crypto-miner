@@ -164,6 +164,28 @@ class JupiterSwapService: ObservableObject {
         throw lastError ?? JupiterError.sendFailed("Transaction failed on-chain")
     }
     
+    /// Fetch current USD price for a token. Returns nil on failure.
+    func fetchPrice(mint: String) async -> Double? {
+        let urlString = "https://api.jup.ag/price/v2?ids=\(mint)"
+        guard let url = URL(string: urlString) else { return nil }
+        var request = URLRequest(url: url)
+        if !JupiterConfig.apiKey.isEmpty {
+            request.setValue(JupiterConfig.apiKey, forHTTPHeaderField: "x-api-key")
+        }
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let dataObj = json["data"] as? [String: Any],
+                  let tokenData = dataObj[mint] as? [String: Any],
+                  let price = (tokenData["price"] as? NSNumber)?.doubleValue ?? (tokenData["price"] as? Double) else {
+                return nil
+            }
+            return price > 0 ? price : nil
+        } catch {
+            return nil
+        }
+    }
+
     /// Sell entire token balance. Fetches balance first.
     func executeSellAll(
         inputMint: String,

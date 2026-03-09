@@ -230,39 +230,77 @@ class DEXTradeService: ObservableObject {
         let pumpId = pump.id
         let mint = pump.baseTokenMint
         let useAutoSell = pump.network == "solana" && mint != nil && solanaWallet?.hasWallet == true && jupiterSwap != nil
+        let downturnEnabled = DownturnConfig.isEnabled && useAutoSell && jupiterSwap != nil
         
         let task = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(cashoutAfterSeconds * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            
-            if useAutoSell, let jupiter = jupiterSwap, let wallet = solanaWallet, let tokenMint = mint {
-                do {
-                    let sig = try await jupiter.executeSellAll(
-                        inputMint: tokenMint,
-                        walletService: wallet,
-                        slippageBps: 1000
-                    )
-                    addTrade(symbol: pump.displaySymbol, action: "Sell", note: "tx: \(String(sig.prefix(8)))...")
-                    let hours = Int(cashoutAfterSeconds) / 3600
-                    lastTrade = "Sold \(pump.displaySymbol) (\(hours)h) tx: \(String(sig.prefix(8)))..."
-                } catch {
-                    if let url = sellURL(for: pump) {
-                        _ = await UIApplication.shared.open(url)
-                        addTrade(symbol: pump.displaySymbol, action: "Sell failed", note: "Opened cashout — complete in browser")
-                        let hours = Int(cashoutAfterSeconds) / 3600
-                        lastTrade = "Opened cashout for \(pump.displaySymbol) (\(hours)h elapsed)"
+            if downturnEnabled, let jupiter = jupiterSwap, let tokenMint = mint {
+                // Combined loop: check timer + downturn every 5 sec
+                let pollInterval: UInt64 = 5_000_000_000 // 5 sec
+                var peakPrice: Double?
+                // Wait 15 sec after buy before first price check (let price stabilize)
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                while !Task.isCancelled {
+                    let elapsed = Date().timeIntervalSince(depositAt)
+                    if elapsed >= cashoutAfterSeconds {
+                        await performSell(pump: pump, pumpId: pumpId, mint: tokenMint, reason: "timer", jupiterSwap: jupiter, solanaWallet: solanaWallet)
+                        break
                     }
+                    if let price = await jupiter.fetchPrice(mint: tokenMint), price > 0 {
+                        if let peak = peakPrice {
+                            let newPeak = max(peak, price)
+                            peakPrice = newPeak
+                            let threshold = 1.0 - Double(DownturnConfig.percentFromPeak) / 100.0
+                            if price < newPeak * threshold {
+                                await performSell(pump: pump, pumpId: pumpId, mint: tokenMint, reason: "downturn", jupiterSwap: jupiter, solanaWallet: solanaWallet)
+                                break
+                            }
+                        } else {
+                            peakPrice = price
+                        }
+                    }
+                    try? await Task.sleep(nanoseconds: pollInterval)
                 }
-            } else if let url = sellURL(for: pump) {
-                _ = await UIApplication.shared.open(url)
-                addTrade(symbol: pump.displaySymbol, action: "Sell failed", note: "Opened cashout — complete in browser")
-                let hours = Int(cashoutAfterSeconds) / 3600
-                lastTrade = "Opened cashout for \(pump.displaySymbol) (\(hours)h elapsed)"
+            } else {
+                // Timer only
+                try? await Task.sleep(nanoseconds: UInt64(cashoutAfterSeconds * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                if useAutoSell, let jupiter = jupiterSwap, let wallet = solanaWallet, let tokenMint = mint {
+                    await performSell(pump: pump, pumpId: pumpId, mint: tokenMint, reason: "timer", jupiterSwap: jupiter, solanaWallet: wallet)
+                } else if let url = sellURL(for: pump) {
+                    _ = await UIApplication.shared.open(url)
+                    addTrade(symbol: pump.displaySymbol, action: "Sell failed", note: "Opened cashout — complete in browser")
+                    lastTrade = "Opened cashout for \(pump.displaySymbol)"
+                }
             }
             pendingCashouts.removeAll { $0.pump.id == pumpId }
             cashoutTasks.removeValue(forKey: pumpId)
         }
         cashoutTasks[pumpId] = task
+    }
+    
+    private func performSell(
+        pump: PumpAlert,
+        pumpId: String,
+        mint: String,
+        reason: String,
+        jupiterSwap: JupiterSwapService,
+        solanaWallet: SolanaWalletService
+    ) async {
+        do {
+            let sig = try await jupiterSwap.executeSellAll(
+                inputMint: mint,
+                walletService: solanaWallet,
+                slippageBps: 1000
+            )
+            addTrade(symbol: pump.displaySymbol, action: "Sell", note: "tx: \(String(sig.prefix(8)))... (\(reason))")
+            lastTrade = "Sold \(pump.displaySymbol) (\(reason)) tx: \(String(sig.prefix(8)))..."
+        } catch {
+            if let url = sellURL(for: pump) {
+                _ = await UIApplication.shared.open(url)
+                addTrade(symbol: pump.displaySymbol, action: "Sell failed", note: "Opened cashout — complete in browser")
+                lastTrade = "Opened cashout for \(pump.displaySymbol) (\(reason) triggered)"
+            }
+        }
     }
     
     func resetBudget() {

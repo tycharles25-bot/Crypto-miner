@@ -11,6 +11,8 @@ struct SettingsView: View {
     @State private var showImportSheet = false
     @AppStorage("app_theme") private var appTheme = "system"
     @AppStorage("cashout_minutes") private var cashoutMinutes: Int = 5
+    @AppStorage("sell_on_downturn") private var sellOnDownturn: Bool = false
+    @AppStorage("downturn_percent") private var downturnPercent: Int = 15
     
     var body: some View {
         NavigationStack {
@@ -85,6 +87,13 @@ struct SettingsView: View {
                     Text("Tokens auto-sell this many minutes after buy. Default: 5. Change takes effect for new buys.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    Toggle("Sell on downturn", isOn: $sellOnDownturn)
+                    if sellOnDownturn {
+                        Stepper("Sell if price drops \(downturnPercent)% from peak", value: $downturnPercent, in: 5...50, step: 5)
+                        Text("Sells immediately when price drops this much from the highest seen. Polls every 5 sec. Works alongside the timer.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 Section("Pump Server") {
@@ -154,6 +163,7 @@ struct SettingsView: View {
             }
             .onAppear {
                 if cashoutMinutes < 1 { cashoutMinutes = 5 }
+                if downturnPercent < 5 || downturnPercent > 50 { downturnPercent = 15 }
             }
         }
     }

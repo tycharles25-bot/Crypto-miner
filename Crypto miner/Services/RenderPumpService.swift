@@ -113,3 +113,19 @@ enum CashoutConfig {
         }
     }
 }
+
+enum DownturnConfig {
+    static var isEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "sell_on_downturn") }
+        set { UserDefaults.standard.set(newValue, forKey: "sell_on_downturn") }
+    }
+    static var percentFromPeak: Int {
+        get {
+            let v = UserDefaults.standard.integer(forKey: "downturn_percent")
+            return v > 0 ? v : 15
+        }
+        set {
+            UserDefaults.standard.set(max(5, min(50, newValue)), forKey: "downturn_percent")
+        }
+    }
+}
