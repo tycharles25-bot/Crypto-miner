@@ -185,7 +185,10 @@ function connect() {
   });
 }
 
-connect();
+// Delay first connection on startup — during Render deploy, old instance may still
+// hold Pump API connection. Wait so we don't get 1008 "only one connection".
+const STARTUP_DELAY_MS = 30000; // 30 sec
+setTimeout(connect, STARTUP_DELAY_MS);
 
 const app = express();
 app.use(express.json());
