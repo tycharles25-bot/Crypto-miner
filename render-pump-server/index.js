@@ -134,6 +134,11 @@ function addSamples(samples) {
 }
 
 function connect() {
+  if (wsClient != null) return; // Guard: don't open duplicate connection
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   try {
     wsClient = new WebSocket(PUMPAPI_WS);
   } catch (e) {
@@ -176,7 +181,11 @@ function connect() {
     lastWsClose = { code, reason: String(reason || '') };
     console.error('[PUMPAPI] Closed', code, reason);
     wsClient = null;
-    reconnectTimer = setTimeout(connect, RECONNECT_MS);
+    if (!reconnectTimer) {
+      // 1008 = "only one connection" — wait longer so Pump API releases session
+      const delay = code === 1008 ? 15000 : RECONNECT_MS;
+      reconnectTimer = setTimeout(connect, delay);
+    }
   });
 
   wsClient.on('error', (e) => {
