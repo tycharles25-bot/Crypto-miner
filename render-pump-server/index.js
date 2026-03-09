@@ -13,7 +13,7 @@ const WINDOW_MS = 3 * 60 * 1000; // 300% in 3 min — recent only
 const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '300', 10); // 300% in 3 min
 const MAX_CHANGE = 10000; // Cap unrealistic outliers (e.g. 66M% from tiny priceBefore)
 const MAX_ALERTS = 50;
-const ALERT_MAX_AGE_MS = 90 * 1000; // Expire alerts after 90 sec — only buy fresh pumps
+const ALERT_MAX_AGE_MS = 45 * 1000; // Expire alerts after 45 sec — only buy on very fresh pumps
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 const JUPITER_BASE = (process.env.JUPITER_API_KEY || '').trim() ? 'https://api.jup.ag' : 'https://lite-api.jup.ag';
 const ROUTE_CHECK_AMOUNT = 10_000_000; // 0.01 SOL lamports
@@ -115,7 +115,7 @@ function runPumpDetection() {
     if (arr.length < 2) continue;
     const priceNow = arr[0].price;
     const tsNow = arr[0].ts;
-    if (tsNow < now - 3 * 60 * 1000) continue; // priceNow must be within 2-3 min (recent)
+    if (tsNow < now - 60 * 1000) continue; // priceNow must be within 60 sec — avoid buys on stale data
     if (arr[0].isBuy === false) continue; // priceNow must be from a buy — sells = dump, not pump
 
     const targetBefore = now - WINDOW_MS;
@@ -312,7 +312,7 @@ app.get('/status', (_, res) => {
     minHolders: MIN_HOLDERS,
     maxHolders: MAX_HOLDERS,
     holderFilterEnabled: !!SOLANA_RPC_URL,
-    alertMaxAgeMinutes: ALERT_MAX_AGE_MS / 60000,
+    alertMaxAgeSeconds: ALERT_MAX_AGE_MS / 1000,
     lastWsError: lastWsError || null,
     lastWsClose: lastWsClose || null,
   });

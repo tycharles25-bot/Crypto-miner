@@ -233,7 +233,7 @@ class DEXTradeService: ObservableObject {
         let downturnEnabled = DownturnConfig.isEnabled && useAutoSell && jupiterSwap != nil
         
         let task = Task { @MainActor in
-            if downturnEnabled, let jupiter = jupiterSwap, let tokenMint = mint {
+            if downturnEnabled, let jupiter = jupiterSwap, let wallet = solanaWallet, let tokenMint = mint {
                 // Combined loop: check timer + downturn every 5 sec
                 let pollInterval: UInt64 = 5_000_000_000 // 5 sec
                 var peakPrice: Double?
@@ -242,7 +242,7 @@ class DEXTradeService: ObservableObject {
                 while !Task.isCancelled {
                     let elapsed = Date().timeIntervalSince(depositAt)
                     if elapsed >= cashoutAfterSeconds {
-                        await performSell(pump: pump, pumpId: pumpId, mint: tokenMint, reason: "timer", jupiterSwap: jupiter, solanaWallet: solanaWallet)
+                        await performSell(pump: pump, pumpId: pumpId, mint: tokenMint, reason: "timer", jupiterSwap: jupiter, solanaWallet: wallet)
                         break
                     }
                     if let price = await jupiter.fetchPrice(mint: tokenMint), price > 0 {
@@ -251,7 +251,7 @@ class DEXTradeService: ObservableObject {
                             peakPrice = newPeak
                             let threshold = 1.0 - Double(DownturnConfig.percentFromPeak) / 100.0
                             if price < newPeak * threshold {
-                                await performSell(pump: pump, pumpId: pumpId, mint: tokenMint, reason: "downturn", jupiterSwap: jupiter, solanaWallet: solanaWallet)
+                                await performSell(pump: pump, pumpId: pumpId, mint: tokenMint, reason: "downturn", jupiterSwap: jupiter, solanaWallet: wallet)
                                 break
                             }
                         } else {
