@@ -75,6 +75,9 @@ struct PumpTrackerView: View {
                 guard let newest = renderPump.alerts.first,
                       newest.network == "solana",
                       newest.baseTokenMint != nil else { return }
+                // Only buy if alert is fresh (< 60 sec old) — avoid stale pumps that already dumped
+                let alertAge = Date().timeIntervalSince(newest.detectedAt)
+                guard alertAge < 60 else { return }
                 let cashoutSecs: TimeInterval = TimeInterval(CashoutConfig.minutes) * 60
                 Task {
                     if let pub = solanaWallet.publicKey {

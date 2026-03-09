@@ -65,14 +65,15 @@ class RenderPumpService: ObservableObject {
                 let (data, _) = try await URLSession.shared.data(from: url)
                 let decoded = try JSONDecoder().decode(RenderAlertsResponse.self, from: data)
                 alerts = decoded.alerts.map { r in
-                    PumpAlert(
+                    let detectedAt = (r.detectedAt.map { Date(timeIntervalSince1970: $0 / 1000) }) ?? Date()
+                    return PumpAlert(
                         id: r.id,
                         symbol: r.symbol,
                         priceChangePercent: r.priceChangePercent,
                         price: r.price,
                         volume: 0,
                         quoteVolume: 0,
-                        detectedAt: Date(),
+                        detectedAt: detectedAt,
                         network: r.network,
                         baseTokenMint: r.baseTokenMint
                     )
