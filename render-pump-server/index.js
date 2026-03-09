@@ -27,6 +27,8 @@ let recentAlerts = [];
 let wsClient = null;
 let reconnectTimer = null;
 let samplesTotal = 0;
+let lastWsError = null;
+let lastWsClose = null;
 
 async function hasJupiterRoute(mint) {
   if (noRouteCache.has(mint)) {
@@ -141,6 +143,8 @@ function connect() {
   }
 
   wsClient.on('open', () => {
+    lastWsError = null;
+    lastWsClose = null;
     console.log('[PUMPAPI] Connected');
   });
 
@@ -168,12 +172,15 @@ function connect() {
     } catch (_) {}
   });
 
-  wsClient.on('close', () => {
+  wsClient.on('close', (code, reason) => {
+    lastWsClose = { code, reason: String(reason || '') };
+    console.error('[PUMPAPI] Closed', code, reason);
     wsClient = null;
     reconnectTimer = setTimeout(connect, RECONNECT_MS);
   });
 
   wsClient.on('error', (e) => {
+    lastWsError = e.message;
     console.error('[PUMPAPI]', e.message);
   });
 }
@@ -209,6 +216,8 @@ app.get('/status', (_, res) => {
     recentAlertsCount: getFreshAlerts().length,
     minPumpPercent: MIN_CHANGE,
     alertMaxAgeMinutes: ALERT_MAX_AGE_MS / 60000,
+    lastWsError: lastWsError || null,
+    lastWsClose: lastWsClose || null,
   });
 });
 
