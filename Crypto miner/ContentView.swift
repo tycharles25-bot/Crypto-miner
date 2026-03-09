@@ -163,7 +163,7 @@ struct PumpTrackerView: View {
                         .font(.title3)
                         .foregroundColor(.secondary)
                     if renderPump.tokensTracked > 0 {
-                        Text("Tracking \(renderPump.tokensTracked) tokens — need 300%+ gain in 5 min")
+                        Text("Tracking \(renderPump.tokensTracked) tokens — need 300%+ gain in 3 min")
                             .font(.caption)
                             .foregroundColor(.secondary.opacity(0.8))
                             .multilineTextAlignment(.center)
