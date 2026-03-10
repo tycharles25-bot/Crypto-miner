@@ -9,8 +9,9 @@ import WebSocket from 'ws';
 const PUMPAPI_WS = 'wss://stream.pumpapi.io/';
 const RECONNECT_MS = 5000;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const WINDOW_MS = 3 * 60 * 1000; // 300% in 3 min — recent only
-const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '300', 10); // 300% in 3 min
+const WINDOW_MS = 3 * 60 * 1000; // Compare to price 3 min ago
+const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '50', 10); // Min % gain — avoid flat/dumping tokens
+const PRICE_MAX_AGE_MS = 60 * 1000; // Current price must be within 60 sec — avoid buying into dumps
 const MAX_CHANGE = 10000; // Cap unrealistic outliers (e.g. 66M% from tiny priceBefore)
 const MAX_ALERTS = 50;
 const ALERT_MAX_AGE_MS = 45 * 1000; // Expire alerts after 45 sec — only buy on very fresh pumps
@@ -115,8 +116,12 @@ function runPumpDetection() {
     if (arr.length < 2) continue;
     const priceNow = arr[0].price;
     const tsNow = arr[0].ts;
-    if (tsNow < now - 60 * 1000) continue; // priceNow must be within 60 sec — avoid buys on stale data
+    if (tsNow < now - PRICE_MAX_AGE_MS) continue; // priceNow must be within 60 sec — fresh only
     if (arr[0].isBuy === false) continue; // priceNow must be from a buy — sells = dump, not pump
+    // Require buy momentum: of last 5 samples, at least 3 must be buys — avoid buying into sell cascades
+    const last5 = arr.slice(0, 5);
+    const buyCount = last5.filter((e) => e.isBuy !== false).length;
+    if (buyCount < 3) continue;
 
     const targetBefore = now - WINDOW_MS;
     // Only use prices from 2.5–3.5 min ago — strictly the previous 3 min, recent only
@@ -308,6 +313,7 @@ app.get('/status', (_, res) => {
     samplesTotal,
     recentAlertsCount: getFreshAlerts().length,
     minPumpPercent: MIN_CHANGE,
+    priceMaxAgeSeconds: PRICE_MAX_AGE_MS / 1000,
     minUniqueTraders: MIN_UNIQUE_TRADERS,
     minHolders: MIN_HOLDERS,
     maxHolders: MAX_HOLDERS,
@@ -318,7 +324,7 @@ app.get('/status', (_, res) => {
   });
 });
 
-// Debug: tokens with 300%+ gain in 3 min — confirms detection is working
+// Debug: tokens meeting pump threshold in 3 min window
 app.get('/near-pumps', (_, res) => {
   const now = Date.now();
   const near = [];
