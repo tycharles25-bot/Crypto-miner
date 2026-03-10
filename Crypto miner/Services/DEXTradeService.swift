@@ -65,6 +65,7 @@ class DEXTradeService: ObservableObject {
     private var tradedSymbols = Set<String>()
     private let cooldownMinutes = 30
     private var cashoutTasks: [String: Task<Void, Never>] = [:]
+    private var isBuyInProgress = false // Only 1 buy at a time
     
     var remainingBudget: Double {
         max(0, totalBudget - spentSoFar)
@@ -140,6 +141,7 @@ class DEXTradeService: ObservableObject {
     ) {
         guard isEnabled else { return }
         guard pump.isDEX else { return }
+        guard !isBuyInProgress else { return } // Only 1 buy at a time
         guard remainingBudget >= perTradeAmount else { return }
         
         let key = (pump.baseTokenMint ?? pump.displaySymbol) + "-" + (pump.network ?? "")
@@ -154,7 +156,9 @@ class DEXTradeService: ObservableObject {
         let useAutoSwap = pump.network == "solana" && solanaWallet?.hasWallet == true && jupiterSwap != nil
         
         if useAutoSwap, let wallet = solanaWallet, let jupiter = jupiterSwap, let mint = pump.baseTokenMint {
+            isBuyInProgress = true
             Task { @MainActor in
+                defer { isBuyInProgress = false }
                 do {
                     let sig = try await jupiter.executeBuy(
                         outputMint: mint,
