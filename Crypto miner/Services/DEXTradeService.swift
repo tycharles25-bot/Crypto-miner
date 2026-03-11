@@ -159,13 +159,18 @@ class DEXTradeService: ObservableObject {
             Task { @MainActor in
                 defer { isBuyInProgress = false }
                 // Re-fetch balance right before buy (may have changed)
-                if let pub = solanaWallet.publicKey {
+                if let pub = wallet.publicKey {
                     await solanaBalance?.fetchBalance(publicKey: pub)
                 }
                 let currentBal = solanaBalance?.balanceLamports ?? 0
                 let amountToUse = currentBal >= minBalanceLamports ? UInt64(Double(currentBal) * 0.8) : 0
                 guard amountToUse >= 1_000_000 else {
                     errorMessage = "Insufficient SOL for trade."
+                    return
+                }
+                // Only buy tokens Jupiter can sell — skip Meteora DYN2 etc. that cause "not tradable" on exit
+                guard await jupiter.canSellToken(mint: mint) else {
+                    errorMessage = "Skipped \(pump.displaySymbol): Jupiter can't sell this token (Meteora DYN2, etc.)"
                     return
                 }
                 do {
@@ -194,7 +199,7 @@ class DEXTradeService: ObservableObject {
                     if isNoRoute {
                         // Delayed retry: Jupiter may index token in ~45 sec
                         try? await Task.sleep(nanoseconds: 45_000_000_000)
-                        if let pub = solanaWallet.publicKey {
+                        if let pub = wallet.publicKey {
                             await solanaBalance?.fetchBalance(publicKey: pub)
                         }
                         let retryBal = solanaBalance?.balanceLamports ?? 0

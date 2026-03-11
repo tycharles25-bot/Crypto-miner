@@ -164,6 +164,24 @@ class JupiterSwapService: ObservableObject {
         throw lastError ?? JupiterError.sendFailed("Transaction failed on-chain")
     }
     
+    /// Check if Jupiter can sell this token (token -> SOL). Use before buying to avoid tokens we can't exit.
+    /// Uses a nominal amount (1 token at 6 decimals). Returns false if "not tradable" or "no route".
+    func canSellToken(mint: String) async -> Bool {
+        let nominalAmount: UInt64 = 1_000_000 // 1 token at 6 decimals
+        do {
+            _ = try await fetchQuote(
+                inputMint: mint,
+                outputMint: solMint,
+                amount: nominalAmount,
+                slippageBps: 1000,
+                restrictIntermediateTokens: false
+            )
+            return true
+        } catch {
+            return false
+        }
+    }
+    
     /// Fetch current USD price for a token. Returns nil on failure.
     func fetchPrice(mint: String) async -> Double? {
         let urlString = "https://api.jup.ag/price/v2?ids=\(mint)"
