@@ -122,6 +122,12 @@ function runPumpDetection() {
     const last5 = arr.slice(0, 5);
     const buyCount = last5.filter((e) => e.isBuy !== false).length;
     if (buyCount < 3) continue;
+    // Require price at or near recent peak: if price dropped >10% from max in last 60 sec, skip — avoid buying dumps
+    const samplesLast60Sec = arr.filter((e) => e.ts >= now - 60 * 1000);
+    const maxPriceRecent = Math.max(...samplesLast60Sec.map((e) => e.price));
+    if (priceNow < maxPriceRecent * 0.9) continue;
+    // Require no immediate decline: current price must not be <90% of previous sample
+    if (arr.length >= 2 && priceNow < arr[1].price * 0.9) continue;
 
     const targetBefore = now - WINDOW_MS;
     // Only use prices from 2.5–3.5 min ago — strictly the previous 3 min, recent only
