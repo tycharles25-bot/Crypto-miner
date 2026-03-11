@@ -111,21 +111,18 @@ struct WalletView: View {
     
     private var investPerStockSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("SOL per trade")
+            Text("Buy amount")
                 .font(.headline)
                 .foregroundColor(.white)
             
-            if solanaWallet.hasWallet {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("\(String(format: "%.4f", Double(dexTradeService.solPerTradeLamports) / 1_000_000_000)) SOL")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Slider(value: Binding(
-                        get: { Double(dexTradeService.solPerTradeLamports) / 1_000_000_000 },
-                        set: { dexTradeService.solPerTradeLamports = UInt64($0 * 1_000_000_000) }
-                    ), in: 0.0001...0.1, step: 0.0001)
-                        .tint(.green)
-                }
+            if solanaWallet.hasWallet, let bal = solanaBalance.balanceLamports {
+                let buyAmount = UInt64(Double(bal) * 0.8)
+                Text("80% of wallet = \(String(format: "%.4f", Double(buyAmount) / 1_000_000_000)) SOL")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Text("20% reserved for fees. 1 trade at a time.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             } else {
                 Text("Connect wallet in Settings")
                     .font(.subheadline)

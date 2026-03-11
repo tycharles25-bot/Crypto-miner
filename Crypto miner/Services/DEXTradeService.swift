@@ -142,32 +142,41 @@ class DEXTradeService: ObservableObject {
         guard isEnabled else { return }
         guard pump.isDEX else { return }
         guard !isBuyInProgress else { return } // Only 1 buy at a time
-        guard remainingBudget >= perTradeAmount else { return }
         
         let key = (pump.baseTokenMint ?? pump.displaySymbol) + "-" + (pump.network ?? "")
         if tradedSymbols.contains(key) { return }
         
-        let minRequired = solPerTradeLamports + 150_000 // + ~0.00015 SOL for fees + priority (avoids error 1)
-        if let bal = solanaBalance?.balanceLamports, bal < minRequired {
-            errorMessage = "Insufficient SOL. Need \(String(format: "%.4f", Double(minRequired) / 1_000_000_000)) SOL (balance: \(String(format: "%.4f", Double(bal) / 1_000_000_000))). Lower SOL per trade in Wallet."
+        // 80% of wallet per trade, 20% left for fees. Min 0.003 SOL total.
+        let minBalanceLamports: UInt64 = 3_000_000 // 0.003 SOL
+        guard let bal = solanaBalance?.balanceLamports, bal >= minBalanceLamports else {
+            errorMessage = "Insufficient SOL. Need at least 0.003 SOL (balance: \(String(format: "%.4f", Double(solanaBalance?.balanceLamports ?? 0) / 1_000_000_000)))."
             return
         }
-        
         let useAutoSwap = pump.network == "solana" && solanaWallet?.hasWallet == true && jupiterSwap != nil
         
         if useAutoSwap, let wallet = solanaWallet, let jupiter = jupiterSwap, let mint = pump.baseTokenMint {
             isBuyInProgress = true
             Task { @MainActor in
                 defer { isBuyInProgress = false }
+                // Re-fetch balance right before buy (may have changed)
+                if let pub = solanaWallet.publicKey {
+                    await solanaBalance?.fetchBalance(publicKey: pub)
+                }
+                let currentBal = solanaBalance?.balanceLamports ?? 0
+                let amountToUse = currentBal >= minBalanceLamports ? UInt64(Double(currentBal) * 0.8) : 0
+                guard amountToUse >= 1_000_000 else {
+                    errorMessage = "Insufficient SOL for trade."
+                    return
+                }
                 do {
                     let sig = try await jupiter.executeBuy(
                         outputMint: mint,
-                        solAmountLamports: solPerTradeLamports,
+                        solAmountLamports: amountToUse,
                         walletService: wallet,
                         slippageBps: 1000,
                         balanceLamports: solanaBalance?.balanceLamports
                     )
-                    spentSoFar += perTradeAmount
+                    spentSoFar += Double(amountToUse) / 1_000_000_000
                     tradedSymbols.insert(key)
                     tradeCount += 1
                     addTrade(symbol: pump.baseTokenMint.map { "\($0.prefix(6))...\($0.suffix(4))" } ?? pump.displaySymbol, action: "Buy", note: "tx: \(String(sig.prefix(8)))...")
@@ -185,15 +194,25 @@ class DEXTradeService: ObservableObject {
                     if isNoRoute {
                         // Delayed retry: Jupiter may index token in ~45 sec
                         try? await Task.sleep(nanoseconds: 45_000_000_000)
+                        if let pub = solanaWallet.publicKey {
+                            await solanaBalance?.fetchBalance(publicKey: pub)
+                        }
+                        let retryBal = solanaBalance?.balanceLamports ?? 0
+                        let retryAmount = retryBal >= minBalanceLamports ? UInt64(Double(retryBal) * 0.8) : 0
+                        guard retryAmount >= 1_000_000 else {
+                            tradedSymbols.insert(key)
+                            addTrade(symbol: pump.baseTokenMint.map { "\($0.prefix(6))...\($0.suffix(4))" } ?? pump.displaySymbol, action: "Buy failed", note: "Insufficient SOL after retry")
+                            return
+                        }
                         do {
                             let sig = try await jupiter.executeBuy(
                                 outputMint: mint,
-                                solAmountLamports: solPerTradeLamports,
+                                solAmountLamports: retryAmount,
                                 walletService: wallet,
                                 slippageBps: 1000,
                                 balanceLamports: solanaBalance?.balanceLamports
                             )
-                            spentSoFar += perTradeAmount
+                            spentSoFar += Double(retryAmount) / 1_000_000_000
                             tradedSymbols.insert(key)
                             tradeCount += 1
                             addTrade(symbol: pump.baseTokenMint.map { "\($0.prefix(6))...\($0.suffix(4))" } ?? pump.displaySymbol, action: "Buy", note: "tx: \(String(sig.prefix(8)))... (retry)")
