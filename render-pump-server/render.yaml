@@ -11,5 +11,6 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Optional: SOLANA_RPC_URL (Helius) enables holder filter (150–300)
-      # MIN_HOLDERS=150 MAX_HOLDERS=300
+      # Required for holder filter (1–20 holders = new tokens)
+      # SOLANA_RPC_URL, MIN_HOLDERS=1, MAX_HOLDERS=20
+      # MIN_PUMP_PERCENT=50, MAX_PUMP_PERCENT=150

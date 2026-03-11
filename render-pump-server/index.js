@@ -9,10 +9,10 @@ import WebSocket from 'ws';
 const PUMPAPI_WS = 'wss://stream.pumpapi.io/';
 const RECONNECT_MS = 5000;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const WINDOW_MS = 3 * 60 * 1000; // Compare to price 3 min ago
-const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '50', 10); // Min % gain — avoid flat/dumping tokens
+const WINDOW_MS = 10 * 60 * 1000; // Compare to price 10 min ago — new token pumps
+const MIN_CHANGE = parseInt(process.env.MIN_PUMP_PERCENT || '50', 10); // Min % gain (50–150%)
+const MAX_CHANGE = parseInt(process.env.MAX_PUMP_PERCENT || '150', 10); // Max % gain — only 50–150% range
 const PRICE_MAX_AGE_MS = 60 * 1000; // Current price must be within 60 sec — avoid buying into dumps
-const MAX_CHANGE = 10000; // Cap unrealistic outliers (e.g. 66M% from tiny priceBefore)
 const MAX_ALERTS = 50;
 const ALERT_MAX_AGE_MS = 45 * 1000; // Expire alerts after 45 sec — only buy on very fresh pumps
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -26,8 +26,8 @@ const priceHistory = new Map(); // mint -> [{ price, ts, solAmount, isBuy }]
 const MIN_PRICE_LAMPORTS = 50_000; // ~$0.00005 — skip micro-cap noise
 const MIN_SOL_VOLUME = 0.5; // Require 0.5 SOL traded in window — filter wash trades
 const MIN_UNIQUE_TRADERS = parseInt(process.env.MIN_UNIQUE_TRADERS || '5', 10); // Min unique traders in window — proxy for holder interest
-const MIN_HOLDERS = parseInt(process.env.MIN_HOLDERS || '150', 10); // Min token holders (requires SOLANA_RPC_URL)
-const MAX_HOLDERS = parseInt(process.env.MAX_HOLDERS || '300', 10); // Max token holders — filter late pumps
+const MIN_HOLDERS = parseInt(process.env.MIN_HOLDERS || '1', 10); // Min holders (1 = creator)
+const MAX_HOLDERS = parseInt(process.env.MAX_HOLDERS || '20', 10); // Max 20 holders — new tokens only
 const SOLANA_RPC_URL = (process.env.SOLANA_RPC_URL || '').trim();
 const HOLDER_CACHE_MS = 2 * 60 * 1000; // Cache holder count 2 min
 const noRouteCache = new Map(); // mint -> timestamp when we learned no route
@@ -73,7 +73,7 @@ async function getHolderCount(mint) {
   }
 }
 
-/** Returns true if holder count is within range (150–300). If RPC unavailable, passes. */
+/** Returns true if holder count is within range (1–20). If RPC unavailable, passes. */
 async function passesHolderFilter(mint) {
   if (!SOLANA_RPC_URL) return true;
   const count = await getHolderCount(mint);
@@ -130,12 +130,12 @@ function runPumpDetection() {
     if (arr.length >= 2 && priceNow < arr[1].price * 0.9) continue;
 
     const targetBefore = now - WINDOW_MS;
-    // Only use prices from 2.5–3.5 min ago — strictly the previous 3 min, recent only
+    // Only use prices from 9.5–10.5 min ago — 10 min window
     const beforeCandidates = arr.filter((e) =>
       e.ts <= targetBefore + 30000 && e.ts >= targetBefore - 30000
     );
     if (beforeCandidates.length < 1) continue;
-    // Require at least 5 samples in last 3 min to avoid sparse-data false pumps
+    // Require at least 5 samples in last 10 min to avoid sparse-data false pumps
     const recentSamples = arr.filter((e) => e.ts >= targetBefore - 60000);
     if (recentSamples.length < 5) continue;
     // Prefer buy prices — sells can create anomalous lows that trigger false pumps
@@ -146,16 +146,16 @@ function runPumpDetection() {
     if (priceBefore < MIN_PRICE_LAMPORTS) continue; // Skip micro-cap noise
 
     // Skip bounce-from-dump: require token wasn't dumping before the pump
-    // (price 3 min ago >= 70% of price 5 min ago — not a dead-cat bounce)
+    // (price 10 min ago >= 70% of price 15 min ago — not a dead-cat bounce)
     const olderCandidates = arr.filter((e) =>
-      e.ts <= now - 4 * 60 * 1000 && e.ts >= now - 6 * 60 * 1000
+      e.ts <= now - 14 * 60 * 1000 && e.ts >= now - 16 * 60 * 1000
     );
     if (olderCandidates.length >= 1) {
-      const price5minAgo = olderCandidates[0].price;
-      if (price5minAgo > 0 && priceBefore < price5minAgo * 0.7) continue;
+      const price15minAgo = olderCandidates[0].price;
+      if (price15minAgo > 0 && priceBefore < price15minAgo * 0.7) continue;
     }
 
-    // Require minimum SOL volume in window — filter wash trades / manipulation
+    // Require minimum SOL volume in 10 min window — filter wash trades / manipulation
     const windowTrades = arr.filter((e) => e.ts >= targetBefore - 60000 && e.ts <= now);
     const solVolume = windowTrades.reduce((sum, e) => sum + (e.solAmount || 0), 0);
     if (solVolume < MIN_SOL_VOLUME) continue;
@@ -319,6 +319,8 @@ app.get('/status', (_, res) => {
     samplesTotal,
     recentAlertsCount: getFreshAlerts().length,
     minPumpPercent: MIN_CHANGE,
+    maxPumpPercent: MAX_CHANGE,
+    pumpWindowMinutes: WINDOW_MS / 60000,
     priceMaxAgeSeconds: PRICE_MAX_AGE_MS / 1000,
     minUniqueTraders: MIN_UNIQUE_TRADERS,
     minHolders: MIN_HOLDERS,
@@ -330,7 +332,7 @@ app.get('/status', (_, res) => {
   });
 });
 
-// Debug: tokens meeting pump threshold in 3 min window
+// Debug: tokens meeting pump threshold in 10 min window (50–150%)
 app.get('/near-pumps', (_, res) => {
   const now = Date.now();
   const near = [];
@@ -338,7 +340,7 @@ app.get('/near-pumps', (_, res) => {
     if (arr.length < 2) continue;
     const priceNow = arr[0].price;
     const tsNow = arr[0].ts;
-    if (tsNow < now - 3 * 60 * 1000) continue;
+    if (tsNow < now - PRICE_MAX_AGE_MS) continue;
     if (arr[0].isBuy === false) continue;
     const targetBefore = now - WINDOW_MS;
     const beforeCandidates = arr.filter((e) =>
@@ -349,11 +351,11 @@ app.get('/near-pumps', (_, res) => {
     const beforeCands = beforeBuys.length >= 1 ? beforeBuys : beforeCandidates;
     const priceBefore = beforeCands[0].price;
     const olderCandidates = arr.filter((e) =>
-      e.ts <= now - 4 * 60 * 1000 && e.ts >= now - 6 * 60 * 1000
+      e.ts <= now - 14 * 60 * 1000 && e.ts >= now - 16 * 60 * 1000
     );
     if (olderCandidates.length >= 1) {
-      const price5minAgo = olderCandidates[0].price;
-      if (price5minAgo > 0 && priceBefore < price5minAgo * 0.7) continue;
+      const price15minAgo = olderCandidates[0].price;
+      if (price15minAgo > 0 && priceBefore < price15minAgo * 0.7) continue;
     }
     const recentSamples = arr.filter((e) => e.ts >= targetBefore - 60000);
     if (recentSamples.length < 5) continue;
@@ -362,10 +364,10 @@ app.get('/near-pumps', (_, res) => {
     const solVolume = windowTrades.reduce((sum, e) => sum + (e.solAmount || 0), 0);
     if (solVolume < MIN_SOL_VOLUME) continue;
     const changePct = (priceNow / priceBefore - 1) * 100;
-    if (changePct >= MIN_CHANGE) near.push({ mint: mint.slice(0, 8) + '...', changePct: Math.round(changePct) });
+    if (changePct >= MIN_CHANGE && changePct <= MAX_CHANGE) near.push({ mint: mint.slice(0, 8) + '...', changePct: Math.round(changePct) });
   }
   near.sort((a, b) => b.changePct - a.changePct);
-  res.json({ nearPumps: near.slice(0, 20), minThreshold: MIN_CHANGE });
+  res.json({ nearPumps: near.slice(0, 20), minThreshold: MIN_CHANGE, maxThreshold: MAX_CHANGE });
 });
 
 app.get('/health', (_, res) => {

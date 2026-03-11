@@ -11,8 +11,8 @@ struct SettingsView: View {
     @State private var showImportSheet = false
     @AppStorage("app_theme") private var appTheme = "system"
     @AppStorage("cashout_minutes") private var cashoutMinutes: Int = 5
-    @AppStorage("sell_on_downturn") private var sellOnDownturn: Bool = false
-    @AppStorage("downturn_percent") private var downturnPercent: Int = 15
+    @AppStorage("sell_on_downturn") private var sellOnDownturn: Bool = true
+    @AppStorage("downturn_percent") private var downturnPercent: Int = 10
     
     var body: some View {
         NavigationStack {
